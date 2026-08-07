@@ -1,0 +1,14 @@
+{
+  "name": "scene01",
+  "duration_seconds": 4,
+  "sampling": {
+    "steering_angle_hz": 1,
+    "speed_hz": 1
+  },
+  "aggressive_events": [
+    {
+      "start_second": 1,
+      "end_second": 2
+    }
+  ]
+}
