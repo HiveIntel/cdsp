@@ -1,0 +1,36 @@
+@prefix vss: <https://covesa.org/vss/latest/model#> .
+
+<urn:vehicle:VIN1805:Vehicle> a vss:Vehicle ;
+    vss:hasVehicle_Ai <urn:vehicle:VIN1805:Vehicle_Ai> ;
+    vss:hasVehicle_Chassis <urn:vehicle:VIN1805:Vehicle_Chassis> ;
+    vss:hasVehicle_CurrentLocation <urn:vehicle:VIN1805:Vehicle_CurrentLocation> ;
+    vss:hasVehicle_Powertrain <urn:vehicle:VIN1805:Vehicle_Powertrain> ;
+    vss:hasVehicle_VehicleIdentification <urn:vehicle:VIN1805:Vehicle_VehicleIdentification> ;
+    vss:id "VIN1805" .
+
+<urn:vehicle:VIN1805:Vehicle_Ai> a vss:Vehicle_Ai ;
+    vss:hasVehicle_Ai_Reasoner <urn:vehicle:VIN1805:Vehicle_Ai_Reasoner> .
+
+<urn:vehicle:VIN1805:Vehicle_Ai_Reasoner> a vss:Vehicle_Ai_Reasoner .
+
+<urn:vehicle:VIN1805:Vehicle_Chassis> a vss:Vehicle_Chassis ;
+    vss:hasVehicle_Chassis_SteeringWheel <urn:vehicle:VIN1805:Vehicle_Chassis_SteeringWheel> .
+
+<urn:vehicle:VIN1805:Vehicle_Chassis_SteeringWheel> a vss:Vehicle_Chassis_SteeringWheel .
+
+<urn:vehicle:VIN1805:Vehicle_CurrentLocation> a vss:Vehicle_CurrentLocation .
+
+<urn:vehicle:VIN1805:Vehicle_Powertrain> a vss:Vehicle_Powertrain ;
+    vss:hasVehicle_Powertrain_TractionBattery <urn:vehicle:VIN1805:Vehicle_Powertrain_TractionBattery> ;
+    vss:hasVehicle_Powertrain_Transmission <urn:vehicle:VIN1805:Vehicle_Powertrain_Transmission> .
+
+<urn:vehicle:VIN1805:Vehicle_Powertrain_TractionBattery> a vss:Vehicle_Powertrain_TractionBattery ;
+    vss:hasVehicle_Powertrain_TractionBattery_StateOfCharge <urn:vehicle:VIN1805:Vehicle_Powertrain_TractionBattery_StateOfCharge> .
+
+<urn:vehicle:VIN1805:Vehicle_Powertrain_TractionBattery_StateOfCharge> a vss:Vehicle_Powertrain_TractionBattery_StateOfCharge .
+
+<urn:vehicle:VIN1805:Vehicle_Powertrain_Transmission> a vss:Vehicle_Powertrain_Transmission .
+
+<urn:vehicle:VIN1805:Vehicle_VehicleIdentification> a vss:Vehicle_VehicleIdentification ;
+    vss:vin "VIN1805" .
+
