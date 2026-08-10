@@ -1,46 +1,71 @@
 #ifndef REASONER_SERVICE_H
 #define REASONER_SERVICE_H
 
-#include <iostream>
+#include <functional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <nlohmann/json.hpp>
 
 #include "data_types.h"
-#include "i_reasoner_adapter.h"
-#include "memory"
+#include "reasoner_profile.h"
 
 class ReasonerService {
    public:
-    explicit ReasonerService(std::shared_ptr<IReasonerAdapter> adapter, const bool reset_datastore)
-        : adapter_(std::move(adapter)) {
-        if (reset_datastore) {
-            std::cout << "Deleting the datastore...\n";
-            deleteDataStore();
-            std::cout << std::endl;
+    // The client-owned queue that receives normalized reasoning-result messages.
+    using ReasoningResultMessageQueue = std::vector<nlohmann::json>;
+    // Delivers a result to an owner that can schedule its queue update safely.
+    using ReasoningResultHandler = std::function<void(nlohmann::json)>;
+
+    explicit ReasonerService(ReasonerProfile reasoner_profile)
+        : reasoner_profile_(std::move(reasoner_profile)) {}
+
+    virtual ~ReasonerService() = default;
+
+    virtual bool initialize() = 0;
+
+    virtual bool updateData(const std::string& data,
+                            const ReasonerSyntaxType& content_type) = 0;
+
+    virtual bool updateRules(const std::vector<std::string>& rule_file_paths) = 0;
+
+    virtual bool updateOntology(const std::vector<std::string>& ontology_file_paths) = 0;
+
+    // The caller retains ownership of the queue for the service lifetime.
+    void setReasoningResultMessageQueue(ReasoningResultMessageQueue& result_message_queue) {
+        result_message_queue_ = &result_message_queue;
+    }
+
+    // Prefer this for asynchronous engines: the owner receives each result and
+    // decides which execution context appends it to the outbound queue.
+    void setReasoningResultHandler(ReasoningResultHandler result_handler) {
+        result_handler_ = std::move(result_handler);
+    }
+
+    const ReasonerProfile& getReasonerProfile() const { return reasoner_profile_; }
+
+   protected:
+    // Returns false until either a result handler or a fallback result queue is assigned.
+    bool publishReasoningResult(const nlohmann::json& result) {
+        if (result_handler_) {
+            result_handler_(result);
+            return true;
         }
-        adapter_->initialize();
+
+        if (result_message_queue_ == nullptr) {
+            return false;
+        }
+
+        result_message_queue_->push_back(result);
+        return true;
     }
 
-    virtual bool checkDataStore() { return adapter_->checkDataStore(); }
+    bool hasReasoningResultMessageQueue() const { return result_message_queue_ != nullptr; }
 
-    virtual bool loadData(const std::string& data, const ReasonerSyntaxType& content_type) {
-        const std::string content_type_str = reasonerSyntaxTypeToContentType(content_type);
-        return adapter_->loadData(data, content_type_str);
-    }
-
-    virtual bool loadRules(const std::string& rules, const RuleLanguageType& content_type) {
-        const std::string content_type_str = ruleLanguageTypeToContentType(content_type);
-        return adapter_->loadData(rules, content_type_str);
-    }
-
-    virtual std::string queryData(
-        const std::string& query, const QueryLanguageType& query_language_type,
-        const DataQueryAcceptType& accept_type = DataQueryAcceptType::TEXT_TSV) {
-        return adapter_->queryData(query, query_language_type, accept_type);
-    }
-
-    virtual bool deleteDataStore() { return adapter_->deleteDataStore(); }
-
-   private:
-    std::shared_ptr<IReasonerAdapter> adapter_;
+    ReasonerProfile reasoner_profile_;
+    ReasoningResultMessageQueue* result_message_queue_ = nullptr;
+    ReasoningResultHandler result_handler_;
 };
 
 #endif  // REASONER_SERVICE_H

@@ -11,6 +11,7 @@
 #include "globals.h"
 #include "helper.h"
 #include "model_config.h"
+#include "reasoner_factory.h"
 #include "system_configuration_service.h"
 #include "websocket_client.h"
 
@@ -228,17 +229,13 @@ int main(int argc, char* argv[]) {
         // Initialize Model Configuration
         const ModelConfig model_config = SystemConfigurationService::loadModelConfig(MODEL_CONFIGURATION_FILE);
         const auto rdf_mapper = createRdfMapper(model_config);
-        const auto reasoner_service = std::make_shared<ReasonerService>(nullptr, false);  // TODO: Replace nullptr with actual reasoner adapter when available.    
-
-
-        // TODO(websocket-client): Construct the downstream reasoner from the opaque profile after
-        // its dedicated implementation is available.
-        // std::shared_ptr<ReasonerService> reasoner_service = ReasonerFactory::initReasoner(...);
+        const auto reasoner_service = ReasonerFactory::initReasoner(model_config.getReasonerProfile());
 
         // Create the WebSocketClient
         std::cout << std::endl << "** Starting Websocket Client **" << std::endl;
         auto client = std::make_shared<WebSocketClient>(system_config, rdf_mapper,
-                                                        model_config.getSignals());
+                                                        model_config.getSignals(),
+                                                        reasoner_service);
 
         // Initialize the RealWebSocketConnection with the WebSocketClient
         client->initializeConnection();

@@ -1,5 +1,9 @@
 # RDF Triple Assembler
 
+> **Status:** TripleAssembler documents the legacy shared-reasoner workflow.
+> The active WebSocket flow maps data with `rdf-mapper` and forwards it to the
+> profile-selected `ReasonerService` directly.
+
 RDF Triple Assembler transforms structured data into RDF triples using the [RDFAdapter](/cdsp/knowledge-layer/symbolic-reasoner/rdfox/README.md) and `TripleWriter` components. It enables developers to convert messages into RDF (Resource Description Framework) triples for semantic data storage and query purposes.
 
 ## Components

@@ -1,198 +1,118 @@
 #include <gtest/gtest.h>
 
-#include "data_types.h"
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "cqels_reasoner_service.h"
+#include "rdf4j_reasoner_service.h"
 #include "reasoner_factory.h"
-#include "reasoner_service.h"
-#include "server_data_fixture.h"
+#include "reasoner_profile.h"
+#include "reasoner_service_pull.h"
+#include "reasoner_service_push.h"
 
-class ReasonerFactoryIntegrationTest : public ::testing::Test {
+namespace {
+
+std::filesystem::path profilePath(const std::string& engine) {
+    return std::filesystem::path(PROJECT_ROOT) / "symbolic-reasoner/examples/driving_style" /
+           ("solution_" + engine) / ("driving_style_" + engine + ".json");
+}
+
+ReasonerProfile testProfile() {
+    return ReasonerProfile{"test", {}, {}, {}};
+}
+
+class PullTestService final : public ReasonerServicePull {
+   public:
+    PullTestService() : ReasonerServicePull(testProfile()) {}
+
    protected:
-    const ReasonerServerData server_data_ = ServerDataFixture::getValidRDFoxServerData();
-    std::shared_ptr<ReasonerService> reasoner_service_;
-
-    void SetUp() override {}
-
-    void TearDown() override {
-        // Clean up
-        if (reasoner_service_) {
-            reasoner_service_->deleteDataStore();
-        }
+    bool initializeReasoner() override { return true; }
+    bool updateDataInReasoner(const std::string&, const ReasonerSyntaxType&) override { return true; }
+    std::vector<nlohmann::json> queryReasoner() override {
+        return {nlohmann::json{{"engine", "pull"}}};
     }
+    bool updateRulesInReasoner(const std::vector<std::string>&) override { return true; }
+    bool updateOntologyInReasoner(const std::vector<std::string>&) override { return true; }
 };
 
-/**
- * @brief Test to verify the successful initialization of a Reasoner with RDFox adapter.
- *
- * This test checks the initialization of a Reasoner using the RDFox adapter and ensures
- * that the reasoner is correctly set up with the provided rules.
- */
-TEST_F(ReasonerFactoryIntegrationTest, InitializeReasonerWithRDFoxAdapterSuccess) {
-    // Arrange
-    ReasonerFactory factory;
+class PushTestService final : public ReasonerServicePush {
+   public:
+    PushTestService() : ReasonerServicePush(testProfile()) {}
 
-    // Arrange Ontology definition
-    std::string ontology_data = R"(
-        @prefix ex: <http://example.org/> .
-        @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-        @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+    bool deliver(const nlohmann::json& result) { return publishPushedReasoningResult(result); }
 
-        # Define the Animal class
-        ex:Animal a rdfs:Class .
+   protected:
+    bool registerConfiguredQueries() override { return true; }
+    bool submitDataToReasoner(const std::string&, const ReasonerSyntaxType&) override { return true; }
+    bool updateRulesInReasoner(const std::vector<std::string>&) override { return true; }
+    bool updateOntologyInReasoner(const std::vector<std::string>&) override { return true; }
+};
 
-        # Define the hasLegs property
-        ex:hasLegs a rdf:Property ;
-            rdfs:domain ex:Animal ;
-            rdfs:range rdfs:Literal .)";
+}  // namespace
 
-    // Arrange Rule definition
-    std::string rule_data = R"(
-        @prefix ex: <http://example.org/> .
-        @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+TEST(ReasonerProfileParserTest, ResolvesRdf4jProfileResources) {
+    const auto profile_file = profilePath("rdf4j");
+    const ReasonerProfile profile = ReasonerProfileParser::parse(profile_file);
 
-        # If an entity has legs (> 0), it is an Animal with Legs
-        [ ?entity, ex:isLeggedAnimal, "true" ] :- 
-            [ ?entity, ex:hasLegs, ?legs ], 
-            FILTER(?legs > 0) .
-
-        # If an entity has no legs (= 0), it is a Legless Animal
-        [ ?entity, ex:isLeglessAnimal, "true" ] :- 
-            [ ?entity, ex:hasLegs, "0"^^xsd:integer ] .)";
-
-    const std::vector<std::pair<RuleLanguageType, std::string>> reasoner_rules = {
-        {RuleLanguageType::DATALOG, rule_data}};
-
-    const std::vector<std::pair<ReasonerSyntaxType, std::string>> ontologies = {
-        {ReasonerSyntaxType::TURTLE, ontology_data}};
-
-    // Act
-    reasoner_service_ = factory.initReasoner(InferenceEngineType::RDFOX, server_data_,
-                                             reasoner_rules, ontologies, false);
-
-    // Assert reasoner adapter has been initialized
-    EXPECT_TRUE(reasoner_service_->checkDataStore());
-
-    // We test the rule by querying the data
-    std::string ttl_data = R"(
-        @prefix ex: <http://example.org/> .
-        ex:Dog ex:hasLegs "4"^^xsd:integer .
-        ex:Bird ex:hasLegs "2"^^xsd:integer .
-        ex:Snake ex:hasLegs "0"^^xsd:integer .)";
-
-    reasoner_service_->loadData(ttl_data, ReasonerSyntaxType::TURTLE);
-
-    // Query to get all legged animals
-    std::string sparql_query_legged_animals = R"(
-        PREFIX ex: <http://example.org/>
-        SELECT ?entity WHERE { ?entity ex:isLeggedAnimal "true" . }
-    )";
-
-    std::string expected_result_legged_animals =
-        "?entity\n<http://example.org/Dog>\n<http://example.org/Bird>\n";
-
-    std::string query_result = reasoner_service_->queryData(
-        sparql_query_legged_animals, QueryLanguageType::SPARQL, DataQueryAcceptType::TEXT_TSV);
-
-    EXPECT_EQ(query_result, expected_result_legged_animals);
-
-    // Query to get all legless animals
-    std::string sparql_query_legless_animals = R"(
-        PREFIX ex: <http://example.org/>
-        SELECT ?entity WHERE { ?entity ex:isLeglessAnimal "true" . }
-    )";
-
-    std::string expected_result_legless_animals = "?entity\n<http://example.org/Snake>\n";
-
-    std::string query_result_legless_animals = reasoner_service_->queryData(
-        sparql_query_legless_animals, QueryLanguageType::SPARQL, DataQueryAcceptType::TEXT_TSV);
-
-    EXPECT_EQ(query_result_legless_animals, expected_result_legless_animals);
+    EXPECT_EQ(profile.name, "RDF4J");
+    ASSERT_EQ(profile.ontologies.size(), 1U);
+    ASSERT_EQ(profile.rules.size(), 1U);
+    ASSERT_EQ(profile.queries.size(), 1U);
+    EXPECT_EQ(profile.ontologies.front(), profile_file.parent_path() / "driving_style_ontology.ttl");
+    EXPECT_EQ(profile.rules.front(), profile_file.parent_path() / "driving_style_rules.ttl");
+    EXPECT_EQ(profile.queries.front(), profile_file.parent_path() / "driving_style_query.rq");
 }
 
-/**
- * @brief Test to verify that an exception is thrown when an invalid inference engine is used.
- *
- * This test checks that the ReasonerFactory throws a std::invalid_argument exception
- * when attempting to initialize a Reasoner with an invalid InferenceEngineType.
- * It ensures that the factory correctly handles invalid input by preventing
- * the creation of a reasoner service.
- */
-TEST_F(ReasonerFactoryIntegrationTest, ThrowExceptionWhenInferenceEngineIsInvalid) {
-    // Arrange
-    ReasonerFactory factory;
-    const std::vector<std::pair<RuleLanguageType, std::string>> reasoner_rules = {};
-    const std::vector<std::pair<ReasonerSyntaxType, std::string>> ontologies = {};
+TEST(ReasonerFactoryTest, CreatesRdf4jPullServiceFromProfileName) {
+    const auto service = ReasonerFactory::initReasoner(profilePath("rdf4j"));
 
-    // Act & Assert
-    EXPECT_THROW(
-        reasoner_service_ = factory.initReasoner(static_cast<InferenceEngineType>(-1), server_data_,
-                                                 reasoner_rules, ontologies, false),
-        std::invalid_argument);
+    EXPECT_NE(std::dynamic_pointer_cast<RDF4JReasonerService>(service), nullptr);
+    EXPECT_EQ(service->getReasonerProfile().name, "RDF4J");
 }
 
-/**
- * @brief Test to verify that an exception is thrown when invalid server data is used.
- *
- * This test checks that the ReasonerFactory throws a std::runtime_error exception
- * when attempting to initialize a Reasoner with invalid server data.
- * It ensures that the factory correctly handles invalid input by preventing
- * the creation of a reasoner service.
- */
-TEST_F(ReasonerFactoryIntegrationTest, InitializeReasonerWithInvalidServerDataFailure) {
-    // Arrange
-    ReasonerFactory factory;
-    const std::vector<std::pair<RuleLanguageType, std::string>> reasoner_rules = {};
-    const std::vector<std::pair<ReasonerSyntaxType, std::string>> ontologies = {};
+TEST(ReasonerFactoryTest, CreatesCqelsPushServiceFromProfileName) {
+    const auto service = ReasonerFactory::initReasoner(profilePath("cqels"));
 
-    ReasonerServerData invalid_server_data = {"invalid_host", "invalid_port", "invalid_auth",
-                                              "some_datastore"};
-
-    // Act & Assert
-    EXPECT_THROW(
-        reasoner_service_ = factory.initReasoner(InferenceEngineType::RDFOX, invalid_server_data,
-                                                 reasoner_rules, ontologies, false),
-        std::runtime_error);
+    EXPECT_NE(std::dynamic_pointer_cast<CQELSReasonerService>(service), nullptr);
+    EXPECT_EQ(service->getReasonerProfile().name, "CQELS");
+    ASSERT_EQ(service->getReasonerProfile().queries.size(), 1U);
 }
 
-/**
- * @brief Test to verify that an exception is thrown when invalid rules are provided.
- *
- * This test checks that the ReasonerFactory throws a std::runtime_error exception
- * when attempting to initialize a Reasoner with invalid rules.
- * It ensures that the factory correctly handles invalid input by preventing
- * the creation of a reasoner service.
- */
-TEST_F(ReasonerFactoryIntegrationTest, InitializeReasonerWithInvalidRulesFailure) {
-    // Arrange
-    ReasonerFactory factory;
-    const std::vector<std::pair<RuleLanguageType, std::string>> invalid_reasoner_rules = {
-        {RuleLanguageType::DATALOG, "invalid_rule"}};
-    const std::vector<std::pair<ReasonerSyntaxType, std::string>> ontologies = {};
+TEST(ReasonerServicePullTest, PublishesEachQueryResultToTheConfiguredQueue) {
+    PullTestService service;
+    ReasonerService::ReasoningResultMessageQueue result_queue;
+    service.setReasoningResultMessageQueue(result_queue);
 
-    // Act & Assert
-    EXPECT_THROW(
-        reasoner_service_ = factory.initReasoner(InferenceEngineType::RDFOX, server_data_,
-                                                 invalid_reasoner_rules, ontologies, false),
-        std::runtime_error);
+    EXPECT_TRUE(service.updateData("@prefix ex: <http://example.org/> .", ReasonerSyntaxType::TURTLE));
+    ASSERT_EQ(result_queue.size(), 1U);
+    EXPECT_EQ(result_queue.front(), nlohmann::json({{"engine", "pull"}}));
 }
 
-/**
- * @brief Test to verify that an exception is thrown when invalid ontologies are provided.
- *
- * This test checks that the ReasonerFactory throws a std::runtime_error exception
- * when attempting to initialize a Reasoner with invalid ontologies.
- * It ensures that the factory correctly handles invalid input by preventing
- * the creation of a reasoner service.
- */
-TEST_F(ReasonerFactoryIntegrationTest, InitializeReasonerWithInvalidOntologiesFailure) {
-    // Arrange
-    ReasonerFactory factory;
-    const std::vector<std::pair<RuleLanguageType, std::string>> reasoner_rules = {};
-    const std::vector<std::pair<ReasonerSyntaxType, std::string>> invalid_ontologies = {
-        {ReasonerSyntaxType::TURTLE, "invalid_ontology"}};
+TEST(ReasonerServicePushTest, PublishesCallbackResultsToTheConfiguredQueue) {
+    PushTestService service;
+    ReasonerService::ReasoningResultMessageQueue result_queue;
+    service.setReasoningResultMessageQueue(result_queue);
 
-    // Act & Assert
-    EXPECT_THROW(
-        reasoner_service_ = factory.initReasoner(InferenceEngineType::RDFOX, server_data_,
-                                                 reasoner_rules, invalid_ontologies, false),
-        std::runtime_error);
+    ASSERT_TRUE(service.initialize());
+    EXPECT_TRUE(service.deliver(nlohmann::json{{"engine", "push"}}));
+    ASSERT_EQ(result_queue.size(), 1U);
+    EXPECT_EQ(result_queue.front(), nlohmann::json({{"engine", "push"}}));
+}
+
+TEST(ReasonerServicePushTest, DeliversResultsThroughTheRegisteredHandler) {
+    PushTestService service;
+    ReasonerService::ReasoningResultMessageQueue result_queue;
+    service.setReasoningResultMessageQueue(result_queue);
+
+    nlohmann::json delivered_result;
+    service.setReasoningResultHandler([&delivered_result](nlohmann::json result) {
+        delivered_result = std::move(result);
+    });
+
+    EXPECT_TRUE(service.deliver(nlohmann::json{{"engine", "push"}}));
+    EXPECT_EQ(delivered_result, nlohmann::json({{"engine", "push"}}));
+    EXPECT_TRUE(result_queue.empty());
 }

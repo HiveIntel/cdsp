@@ -1,17 +1,45 @@
-# Services Module
+# Reasoner Services
 
-The Services Module is a core component of the Knowledge Layer application, responsible for managing interactions with reasoning engines and facilitating rule-based reasoning within the system. This module primarily consists of the ReasonerService and ReasonerFactory classes, which abstract the complexities of connecting to and utilizing different inference engines.
+## Contract
 
-## Key Components
+Every `ReasonerService` is initialized from a parsed `ReasonerProfile` and
+provides:
 
-### ReasonerService
-   
-This is an interface between the application and the underlying reasoner adapter. It provides methods to:
-- Initialize the Adapter: Establishes a connection to the selected reasoning engine.
-- Data Management: Load data and rules into the reasoner.
-- Querying: Execute queries on the data store.
-- Cleanup: Delete the data store when necessary.
-   
-###  The ReasonerFactory 
+- `initialize()`
+- `updateData(data, syntax)`
+- `updateRules(rulePaths)`
+- `updateOntology(ontologyPaths)`
+- `setReasoningResultMessageQueue(queue)`
+- `setReasoningResultHandler(handler)`
 
-It is responsible for creating and initializing a ReasonerService with the appropriate reasoning engine (e.g., RDFox). It provides a seamless way to instantiate services with the required configurations.
+The result queue is owned by `WebSocketClient` and contains outbound JSON
+messages. A service using queue delivery publishes only after the client assigns
+that queue. For asynchronous engine callbacks, the client instead installs a
+result handler; the handler schedules the queue update on the client's WebSocket
+I/O context.
+The queue setter remains available as the fallback for callers without a handler.
+
+## Profiles
+
+`ReasonerProfileParser` reads a profile file, checks its resources, and resolves
+relative paths against the profile directory. `name` selects an engine in
+`ReasonerFactory`; `ontologies` and `rules` are optional; `query` is required.
+String and array forms are both accepted for resource fields.
+
+## Pull and push bases
+
+`ReasonerServicePull` owns the sequence:
+
+```text
+initialize → update engine data → query engine → publish each result
+```
+
+`ReasonerServicePush` owns the sequence:
+
+```text
+initialize → register profile queries → submit data → publish callback result
+```
+
+Concrete engines implement only their engine-specific hooks. RDF4J and CQELS
+classes exist as placeholders and deliberately return failure for actual engine
+operations until their integrations are implemented.

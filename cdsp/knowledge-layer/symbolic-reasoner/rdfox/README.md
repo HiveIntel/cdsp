@@ -1,6 +1,10 @@
 
 # RDFox Integration
 
+> **Status:** This adapter is retained as a legacy, standalone RDFox integration.
+> The profile-driven `ReasonerFactory` currently selects only RDF4J and CQELS
+> placeholder services; it does not construct `RDFoxAdapter`.
+
 This folder contains the necessary files to interact with RDFox using the [RDFox adapter](./src/README.md), a high-performance knowledge graph and reasoning engine used in this project.
 
 ## How to Use RDFox

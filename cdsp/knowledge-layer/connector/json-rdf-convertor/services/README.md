@@ -1,5 +1,9 @@
 # Services Module
 
+> **Status:** `ReasoningQueryService` belongs to the legacy shared-query path.
+> New reasoning results are delivered by `ReasonerService` to the WebSocket
+> client's outbound reply queue.
+
 This module contains service classes responsible for handling interactions with the reasoning backend. These services serve as an abstraction layer to process reasoning using the [Reasoner Service](/cdsp/knowledge-layer/symbolic-reasoner/services/README.md) and process responses with [JSON converter](/cdsp/knowledge-layer/connector/json-rdf-convertor/json-writer/README.md).
 
 ## Components

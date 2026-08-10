@@ -1,5 +1,6 @@
 #include "system_configuration_service.h"
 
+#include <filesystem>
 #include <iostream>
 #include <nlohmann/json.hpp>
 
@@ -59,9 +60,16 @@ ModelConfig SystemConfigurationService::loadModelConfig(const std::string& confi
         // TODO(model-config): The legacy ModelConfigConverter step is intentionally removed.
         // DtoToBo dto_to_bo(file_handler);
         // const auto model_config = dto_to_bo.convert(model_config_dto);
+        const std::filesystem::path model_config_path =
+            std::filesystem::absolute(std::filesystem::path(config_file));
+        std::filesystem::path reasoner_profile_path(model_config_dto.reasoner_profile);
+        if (reasoner_profile_path.is_relative()) {
+            reasoner_profile_path = model_config_path.parent_path() / reasoner_profile_path;
+        }
+
         const ModelConfig model_config(model_config_dto.input.signals,
                                        model_config_dto.input.rdf_shapes,
-                                       model_config_dto.reasoner_profile);
+                                       reasoner_profile_path.lexically_normal().string());
         std::cout << " - Model configuration loaded successfully\n\n";
         return model_config;
 

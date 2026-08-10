@@ -11,6 +11,7 @@
 #include "data_types.h"
 #include "message_service.h"
 #include "rdf_mapper.h"
+#include "reasoner_service.h"
 #include "request_registry.h"
 #include "websocket_interface.h"
 
@@ -24,6 +25,7 @@ class WebSocketClient : public std::enable_shared_from_this<WebSocketClient> {
     WebSocketClient(SystemConfig system_config,
                     std::shared_ptr<rdf_mapper::RdfMapper> rdf_mapper,
                     std::vector<std::string> signals,
+                    std::shared_ptr<ReasonerService> reasoner_service,
                     std::shared_ptr<WebSocketClientInterface> connection = nullptr);
 
     void initializeConnection();
@@ -35,6 +37,9 @@ class WebSocketClient : public std::enable_shared_from_this<WebSocketClient> {
     void onSendMessage(boost::system::error_code ec, std::size_t bytes_transferred);
     void onReceiveMessage(beast::error_code ec, std::size_t bytes_transferred);
 
+    // Schedules sending queued reasoning replies on the WebSocket I/O context.
+    void writeReplyMessagesOnQueue();
+
    private:
     SystemConfig system_config_;
     net::io_context io_context_;
@@ -42,11 +47,17 @@ class WebSocketClient : public std::enable_shared_from_this<WebSocketClient> {
     std::shared_ptr<rdf_mapper::RdfMapper> rdf_mapper_;
     std::vector<std::string> signals_;        
     std::shared_ptr<ReasonerService> reasoner_service_;
+    // Reasoner results are outbound WebSocket messages and share this queue.
     std::vector<json> reply_messages_queue_;
+    bool write_in_progress_ = false;
+    bool read_in_progress_ = false;
+    // Incoming WebSocket payloads remain separate from reasoning results.
     std::vector<std::shared_ptr<const std::string>> response_messages_queue_;
 
     void processMessage(const std::shared_ptr<const std::string>& message);
-    void writeReplyMessagesOnQueue();
+    void enqueueReasoningResult(json result);
+    void startNextReplyWrite();
+    void startReadIfNeeded();
 };
 
 #endif  // WEBSOCKET_CLIENT_H

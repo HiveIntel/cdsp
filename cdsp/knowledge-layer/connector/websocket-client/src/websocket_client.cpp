@@ -36,16 +36,23 @@ void Fail(const boost::system::error_code& ec, const std::string& what) {
 WebSocketClient::WebSocketClient(SystemConfig system_config,
                                  std::shared_ptr<rdf_mapper::RdfMapper> rdf_mapper,
                                  std::vector<std::string> signals,
+                                 std::shared_ptr<ReasonerService> reasoner_service,
                                  std::shared_ptr<WebSocketClientInterface> connection)
     : system_config_(std::move(system_config)),
       connection_(std::move(connection)),
       //request_registry_(std::make_shared<RequestRegistry>()),
       rdf_mapper_(std::move(rdf_mapper)),
-      signals_(std::move(signals)) {
+      signals_(std::move(signals)),
+      reasoner_service_(std::move(reasoner_service)) {
 
     if (!rdf_mapper_) {
         throw std::invalid_argument("RDF mapper must be initialized before creating WebSocketClient");
     }
+    if (!reasoner_service_) {
+        throw std::invalid_argument("Reasoner service must be initialized before creating WebSocketClient");
+    }
+
+    reasoner_service_->setReasoningResultMessageQueue(reply_messages_queue_);
 }
 
 /**
@@ -56,6 +63,19 @@ WebSocketClient::WebSocketClient(SystemConfig system_config,
  * current WebSocketClient instance.
  */
 void WebSocketClient::initializeConnection() {
+    const auto weak_client = weak_from_this();
+    reasoner_service_->setReasoningResultHandler(
+        [weak_client](json result) mutable {
+            if (const auto client = weak_client.lock()) {
+                net::post(client->io_context_,
+                          [weak_client, result = std::move(result)]() mutable {
+                              if (const auto scheduled_client = weak_client.lock()) {
+                                  scheduled_client->enqueueReasoningResult(std::move(result));
+                              }
+                          });
+            }
+        });
+
     if (!connection_) {
         auto self = std::enable_shared_from_this<WebSocketClient>::shared_from_this();
         connection_ = std::make_shared<RealWebSocketConnection>(io_context_, self);
@@ -114,7 +134,7 @@ void WebSocketClient::handshake(boost::system::error_code error_code) {
     if (object_id.empty()) {
         throw std::invalid_argument("The environment variable VEHICLE_OBJECT_ID has not been set");
     }
-    
+
     /*
 
     MessageService::createAndQueueVehicleSubscribeMessage(object_id, signals_, *request_registry_, reply_messages_queue_);
@@ -164,13 +184,16 @@ void WebSocketClient::sendMessage(const json& message) {
 void WebSocketClient::onSendMessage(boost::system::error_code error_code,
                                     std::size_t bytes_transferred) {
 
+    write_in_progress_ = false;
+
     if (error_code) {
         Fail(error_code, "write");
         return;
     }
 
     std::cout << "Message sent! " << bytes_transferred << " bytes transferred\n\n";
-    connection_->asyncRead();
+    startNextReplyWrite();
+    startReadIfNeeded();
 }
 
 
@@ -179,13 +202,15 @@ void WebSocketClient::onReceiveMessage(
     boost::beast::error_code error_code,
     std::size_t bytes_transferred) {
 
+    read_in_progress_ = false;
+
     if (error_code) {
         Fail(error_code, "read");
         return;
     }
 
     const auto received_message = std::make_shared<std::string>(connection_->getReceivedMessage());
-    connection_->consumeBuffer(bytes_transferred);  // Clear the buffer for the next message
+    connection_->consumeBuffer(bytes_transferred);
     processMessage(received_message);
 }
 
@@ -211,6 +236,9 @@ void WebSocketClient::processMessage(const std::shared_ptr<const std::string>& m
    
     if (!rdf.empty()) {
         std::cout << "Mapped incoming message to RDF:\n" << rdf << std::endl;
+        if (!reasoner_service_->updateData(rdf, ReasonerSyntaxType::TURTLE)) {
+            std::cerr << "Reasoner service rejected the RDF update.\n";
+        }
     }
     
     // Attempt to extract a data message from the priority message
@@ -237,11 +265,7 @@ void WebSocketClient::processMessage(const std::shared_ptr<const std::string>& m
     }
     */
 
-    if (!reply_messages_queue_.empty()) {
-        writeReplyMessagesOnQueue();
-    } else {
-        connection_->asyncRead();
-    }
+    startReadIfNeeded();
 }
 
 /**
@@ -250,14 +274,38 @@ void WebSocketClient::processMessage(const std::shared_ptr<const std::string>& m
  * This function sends the first message in the reply_messages_queue_ to the WebSocket server.
  */
 void WebSocketClient::writeReplyMessagesOnQueue() {
-    if (reply_messages_queue_.empty()) {
-        std::cerr << "No messages to send." << std::endl;
+    const auto weak_client = weak_from_this();
+    net::post(io_context_, [weak_client]() {
+        if (const auto client = weak_client.lock()) {
+            client->startNextReplyWrite();
+        }
+    });
+}
+
+void WebSocketClient::enqueueReasoningResult(json result) {
+    reply_messages_queue_.push_back(std::move(result));
+    startNextReplyWrite();
+}
+
+void WebSocketClient::startNextReplyWrite() {
+    if (write_in_progress_ || reply_messages_queue_.empty() || !connection_) {
         return;
     }
+
+    write_in_progress_ = true;
     json reply_message = reply_messages_queue_.front();
     reply_messages_queue_.erase(reply_messages_queue_.begin());
     std::cout << Helper::getFormattedTimestampNow("%Y-%m-%dT%H:%M:%S", true, true)
               << " Sending queue message:\n"
               << reply_message.dump() << std::endl;
     sendMessage(reply_message);
+}
+
+void WebSocketClient::startReadIfNeeded() {
+    if (read_in_progress_) {
+        return;
+    }
+
+    read_in_progress_ = true;
+    connection_->asyncRead();
 }

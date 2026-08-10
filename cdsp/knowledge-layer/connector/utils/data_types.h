@@ -11,6 +11,8 @@
  */
 enum class InferenceEngineType {
     RDFOX,
+    RDF4J,
+    CQELS,
 };
 
 /**
@@ -527,6 +529,10 @@ inline InferenceEngineType stringToInferenceEngineType(const std::string& type) 
     std::string lowerCaseType = Helper::toLowerCase(type);
     if (lowerCaseType == "rdfox") {
         return InferenceEngineType::RDFOX;
+    } else if (lowerCaseType == "rdf4j") {
+        return InferenceEngineType::RDF4J;
+    } else if (lowerCaseType == "cqels") {
+        return InferenceEngineType::CQELS;
     } else {
         throw std::invalid_argument("Unsupported inference engine string type: " + type);
     }
@@ -536,6 +542,10 @@ inline std::string inferenceEngineTypeToString(const InferenceEngineType& type) 
     switch (type) {
         case InferenceEngineType::RDFOX:
             return "RDFox";
+        case InferenceEngineType::RDF4J:
+            return "RDF4J";
+        case InferenceEngineType::CQELS:
+            return "CQELS";
         default:
             throw std::invalid_argument("Unsupported inference engine type");
     }

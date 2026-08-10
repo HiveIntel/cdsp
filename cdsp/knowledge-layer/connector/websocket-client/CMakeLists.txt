@@ -32,10 +32,10 @@ target_link_libraries(websocket_client
         nlohmann_json::nlohmann_json
         data_objects
         rdf_mapper
-        # TODO(websocket-client): The client no longer owns TripleAssembler or ReasonerService.
+        reasoner
+        # TODO(websocket-client): The client no longer owns TripleAssembler.
         # rdf_writer
         # rdf_services
-        # reasoner
         websocket_client_runtime
         common
     PRIVATE  

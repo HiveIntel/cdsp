@@ -1,25 +1,27 @@
 #ifndef MOCK_REASONER_SERVICE_H
 #define MOCK_REASONER_SERVICE_H
 
+#include <utility>
+#include <vector>
+
 #include <gmock/gmock.h>
 
-#include "reasoner_service.h"
+#include "reasoner_service_pull.h"
 
-class MockReasonerService : public ReasonerService {
+class MockReasonerService : public ReasonerServicePull {
    public:
-    MockReasonerService(std::shared_ptr<IReasonerAdapter> adapter)
-        : ReasonerService(adapter, false) {}
+    explicit MockReasonerService(ReasonerProfile profile)
+        : ReasonerServicePull(std::move(profile)) {}
 
-    MOCK_METHOD(bool, checkDataStore, (), (override));
-    MOCK_METHOD(bool, loadData, (const std::string& data, const ReasonerSyntaxType& content_type),
+   protected:
+    MOCK_METHOD(bool, initializeReasoner, (), (override));
+    MOCK_METHOD(bool, updateDataInReasoner,
+                (const std::string& data, const ReasonerSyntaxType& content_type), (override));
+    MOCK_METHOD(std::vector<nlohmann::json>, queryReasoner, (), (override));
+    MOCK_METHOD(bool, updateRulesInReasoner, (const std::vector<std::string>& rule_file_paths),
                 (override));
-    MOCK_METHOD(bool, loadRules, (const std::string& rules, const RuleLanguageType& content_type),
-                (override));
-    MOCK_METHOD(std::string, queryData,
-                (const std::string& query, const QueryLanguageType& query_language_type,
-                 const DataQueryAcceptType& accept_type),
-                (override));
-    MOCK_METHOD(bool, deleteDataStore, (), (override));
+    MOCK_METHOD(bool, updateOntologyInReasoner,
+                (const std::vector<std::string>& ontology_file_paths), (override));
 };
 
 #endif  // MOCK_REASONER_SERVICE_H

@@ -1,14 +1,9 @@
-# Add the integration test executable for ReasonerFactory
+# Add profile, factory, and pull/push service tests.
 add_executable(reasoner_factory_integration_tests reasoner_factory_integration_test.cpp)
-target_include_directories(reasoner_factory_integration_tests
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/utils
-)
 target_link_libraries(reasoner_factory_integration_tests 
     PRIVATE 
         GTest::gtest_main 
         reasoner
-        test_fixtures
 )
 
 # Add unit and integration tests to CTest

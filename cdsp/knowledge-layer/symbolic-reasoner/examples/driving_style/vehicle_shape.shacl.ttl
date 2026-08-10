@@ -1,0 +1,180 @@
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix vss: <https://covesa.org/vss/latest/model#> .
+@prefix vsssh: <https://covesa.org/vss/latest/shapes#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+vsssh:Vehicle a sh:NodeShape ;
+    sh:description "High-level vehicle data." ;
+    sh:name "Vehicle" ;
+    sh:property [ sh:class vss:Vehicle_VehicleIdentification ;
+            sh:maxCount 1 ;
+            sh:name "vehicleIdentification" ;
+            sh:node vsssh:Vehicle_VehicleIdentification ;
+            sh:nodeKind sh:IRI ;
+            sh:path vss:hasVehicle_VehicleIdentification ],
+        [ sh:datatype xsd:float ;
+            sh:description "Vehicle speed." ;
+            sh:maxCount 1 ;
+            sh:name "speed" ;
+            sh:nodeKind sh:Literal ;
+            sh:path vss:speed ],
+        [ sh:class vss:Vehicle_Powertrain ;
+            sh:maxCount 1 ;
+            sh:name "powertrain" ;
+            sh:node vsssh:Vehicle_Powertrain ;
+            sh:nodeKind sh:IRI ;
+            sh:path vss:hasVehicle_Powertrain ],
+        [ sh:class vss:Vehicle_Ai ;
+            sh:maxCount 1 ;
+            sh:name "ai" ;
+            sh:node vsssh:Vehicle_Ai ;
+            sh:nodeKind sh:IRI ;
+            sh:path vss:hasVehicle_Ai ],
+        [ sh:class vss:Vehicle_CurrentLocation ;
+            sh:maxCount 1 ;
+            sh:name "currentLocation" ;
+            sh:node vsssh:Vehicle_CurrentLocation ;
+            sh:nodeKind sh:IRI ;
+            sh:path vss:hasVehicle_CurrentLocation ],
+        [ sh:class vss:Vehicle_Chassis ;
+            sh:maxCount 1 ;
+            sh:name "chassis" ;
+            sh:node vsssh:Vehicle_Chassis ;
+            sh:nodeKind sh:IRI ;
+            sh:path vss:hasVehicle_Chassis ],
+        [ sh:datatype xsd:string ;
+            sh:maxCount 1 ;
+            sh:minCount 1 ;
+            sh:name "id" ;
+            sh:nodeKind sh:Literal ;
+            sh:path vss:id ] ;
+    sh:targetClass vss:Vehicle .
+
+vsssh:Vehicle_Ai a sh:NodeShape ;
+    sh:description "Container branch for Vehicle.AI.Reasoner.InferenceResults." ;
+    sh:name "Vehicle_Ai" ;
+    sh:property [ sh:class vss:Vehicle_Ai_Reasoner ;
+            sh:maxCount 1 ;
+            sh:name "reasoner" ;
+            sh:node vsssh:Vehicle_Ai_Reasoner ;
+            sh:nodeKind sh:IRI ;
+            sh:path vss:hasVehicle_Ai_Reasoner ] ;
+    sh:targetClass vss:Vehicle_Ai .
+
+vsssh:Vehicle_Ai_Reasoner a sh:NodeShape ;
+    sh:description "Container branch for Vehicle.AI.Reasoner.InferenceResults." ;
+    sh:name "Vehicle_Ai_Reasoner" ;
+    sh:property [ sh:datatype xsd:string ;
+            sh:description "Inference results from the reasoner" ;
+            sh:maxCount 1 ;
+            sh:name "inferenceResults" ;
+            sh:nodeKind sh:Literal ;
+            sh:path vss:inferenceResults ] ;
+    sh:targetClass vss:Vehicle_Ai_Reasoner .
+
+vsssh:Vehicle_Chassis a sh:NodeShape ;
+    sh:description "All data concerning steering, suspension, wheels, and brakes." ;
+    sh:name "Vehicle_Chassis" ;
+    sh:property [ sh:class vss:Vehicle_Chassis_SteeringWheel ;
+            sh:maxCount 1 ;
+            sh:name "steeringWheel" ;
+            sh:node vsssh:Vehicle_Chassis_SteeringWheel ;
+            sh:nodeKind sh:IRI ;
+            sh:path vss:hasVehicle_Chassis_SteeringWheel ] ;
+    sh:targetClass vss:Vehicle_Chassis .
+
+vsssh:Vehicle_Chassis_SteeringWheel a sh:NodeShape ;
+    sh:description "Steering wheel signals" ;
+    sh:name "Vehicle_Chassis_SteeringWheel" ;
+    sh:property [ sh:datatype xsd:string ;
+            sh:description "Steering wheel angle. Positive = degrees to the left. Negative = degrees to the right." ;
+            sh:maxCount 1 ;
+            sh:name "angle" ;
+            sh:nodeKind sh:Literal ;
+            sh:path vss:angle ] ;
+    sh:targetClass vss:Vehicle_Chassis_SteeringWheel .
+
+vsssh:Vehicle_CurrentLocation a sh:NodeShape ;
+    sh:description "The current latitude and longitude of the vehicle." ;
+    sh:name "Vehicle_CurrentLocation" ;
+    sh:property [ sh:datatype xsd:float ;
+            sh:description "Current longitude of vehicle in WGS 84 geodetic coordinates, as measured at the position of GNSS receiver antenna." ;
+            sh:maxCount 1 ;
+            sh:name "longitude" ;
+            sh:nodeKind sh:Literal ;
+            sh:path vss:longitude ],
+        [ sh:datatype xsd:float ;
+            sh:description "Current latitude of vehicle in WGS 84 geodetic coordinates, as measured at the position of GNSS receiver antenna." ;
+            sh:maxCount 1 ;
+            sh:name "latitude" ;
+            sh:nodeKind sh:Literal ;
+            sh:path vss:latitude ] ;
+    sh:targetClass vss:Vehicle_CurrentLocation .
+
+vsssh:Vehicle_Powertrain a sh:NodeShape ;
+    sh:description "Powertrain data for battery management, etc." ;
+    sh:name "Vehicle_Powertrain" ;
+    sh:property [ sh:class vss:Vehicle_Powertrain_Transmission ;
+            sh:maxCount 1 ;
+            sh:name "transmission" ;
+            sh:node vsssh:Vehicle_Powertrain_Transmission ;
+            sh:nodeKind sh:IRI ;
+            sh:path vss:hasVehicle_Powertrain_Transmission ],
+        [ sh:class vss:Vehicle_Powertrain_TractionBattery ;
+            sh:maxCount 1 ;
+            sh:name "tractionBattery" ;
+            sh:node vsssh:Vehicle_Powertrain_TractionBattery ;
+            sh:nodeKind sh:IRI ;
+            sh:path vss:hasVehicle_Powertrain_TractionBattery ] ;
+    sh:targetClass vss:Vehicle_Powertrain .
+
+vsssh:Vehicle_Powertrain_TractionBattery a sh:NodeShape ;
+    sh:description "Battery Management data." ;
+    sh:name "Vehicle_Powertrain_TractionBattery" ;
+    sh:property [ sh:class vss:Vehicle_Powertrain_TractionBattery_StateOfCharge ;
+            sh:maxCount 1 ;
+            sh:name "stateOfCharge" ;
+            sh:node vsssh:Vehicle_Powertrain_TractionBattery_StateOfCharge ;
+            sh:nodeKind sh:IRI ;
+            sh:path vss:hasVehicle_Powertrain_TractionBattery_StateOfCharge ],
+        [ sh:datatype xsd:string ;
+            sh:description "Nominal Voltage of the battery." ;
+            sh:maxCount 1 ;
+            sh:name "nominalVoltage" ;
+            sh:nodeKind sh:Literal ;
+            sh:path vss:nominalVoltage ] ;
+    sh:targetClass vss:Vehicle_Powertrain_TractionBattery .
+
+vsssh:Vehicle_Powertrain_TractionBattery_StateOfCharge a sh:NodeShape ;
+    sh:description "Information on the state of charge of the vehicle's high voltage battery." ;
+    sh:name "Vehicle_Powertrain_TractionBattery_StateOfCharge" ;
+    sh:property [ sh:datatype xsd:float ;
+            sh:description "Physical state of charge of high voltage battery expressed in kWh." ;
+            sh:maxCount 1 ;
+            sh:name "currentEnergy" ;
+            sh:nodeKind sh:Literal ;
+            sh:path vss:currentEnergy ] ;
+    sh:targetClass vss:Vehicle_Powertrain_TractionBattery_StateOfCharge .
+
+vsssh:Vehicle_Powertrain_Transmission a sh:NodeShape ;
+    sh:description "Transmission-specific data, stopping at the drive shafts." ;
+    sh:name "Vehicle_Powertrain_Transmission" ;
+    sh:property [ sh:datatype xsd:string ;
+            sh:description "The current gear. 0=Neutral, 1/2/..=Forward, -1/-2/..=Reverse." ;
+            sh:maxCount 1 ;
+            sh:name "currentGear" ;
+            sh:nodeKind sh:Literal ;
+            sh:path vss:currentGear ] ;
+    sh:targetClass vss:Vehicle_Powertrain_Transmission .
+
+vsssh:Vehicle_VehicleIdentification a sh:NodeShape ;
+    sh:description "Attributes that identify a vehicle." ;
+    sh:name "Vehicle_VehicleIdentification" ;
+    sh:property [ sh:datatype xsd:string ;
+            sh:description "17-character Vehicle Identification Number (VIN) as defined by ISO 3779." ;
+            sh:maxCount 1 ;
+            sh:name "vin" ;
+            sh:nodeKind sh:Literal ;
+            sh:path vss:vin ] ;
+    sh:targetClass vss:Vehicle_VehicleIdentification .
+

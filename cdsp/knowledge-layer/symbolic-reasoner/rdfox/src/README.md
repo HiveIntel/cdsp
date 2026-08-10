@@ -1,5 +1,8 @@
 # RDFoxAdapter
 
+> **Status:** `RDFoxAdapter` is a legacy standalone adapter. It is not part of
+> the current profile-driven `ReasonerService` factory path.
+
 ## Overview
 
 `RDFoxAdapter` is responsible for communicating with the RDFox server using RESTful APIs. This adapter allows users to perform various operations such as creating connections, loading data, querying data (using [SPARQL](https://www.w3.org/TR/sparql11-query/)), and managing cursors efficiently.
