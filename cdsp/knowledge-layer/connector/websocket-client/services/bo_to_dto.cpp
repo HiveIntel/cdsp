@@ -21,12 +21,12 @@ std::vector<GetMessageDTO> BoToDto::convert(const GetMessage& b_obj) {
      * @param path An optional string representing the path of the node.
      */
     auto createDto = [&](const std::optional<std::string>& path) {
-        GetMessageDTO dto;
+        GetMessageDTO dto{};
         dto.schema = schema;
         dto.instance = b_obj.getHeader().getInstance();
         dto.path = path;
-        dto.format = MessageStructureFormatToString(
-            MessageStructureFormat::FLAT);  // Default format for GetMessageDTO
+        dto.format = MessageStructureFormatToString(MessageStructureFormat::FLAT);  // Default format for GetMessageDTO
+        dto.root = "absolute";  // Default root for GetMessageDTO
         dtos.push_back(dto);
     };
 
@@ -63,7 +63,7 @@ std::vector<SubscribeMessageDTO> BoToDto::convert(const SubscribeMessage& b_obj)
         dto.path = path;
         dto.format = MessageStructureFormatToString(
             MessageStructureFormat::FLAT);  // Default format for SubscribeMessageDTO
-        dto.root = "relative";              // Default root for SubscribeMessageDTO
+        dto.root = "absolute";              // Default root for SubscribeMessageDTO
         dtos.push_back(dto);
     };
 

@@ -3,6 +3,7 @@
 #include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <nlohmann/json.hpp>
 
@@ -10,8 +11,6 @@
 #include "globals.h"
 #include "helper.h"
 #include "model_config.h"
-#include "reasoner_factory.h"
-#include "reasoner_service.h"
 #include "system_configuration_service.h"
 #include "websocket_client.h"
 
@@ -22,15 +21,39 @@ boost::uuids::random_generator uuidGenerator;
 constexpr char DEFAULT_HOST_WEB_SOCKET_SERVER[] = "127.0.0.1";
 constexpr char DEFAULT_PORT_WEB_SOCKET_SERVER[] = "8080";
 const std::string DEFAULT_TARGET_WEB_SOCKET_SERVER = "";
-const std::string MODEL_CONFIGURATION_FILE =
-    getProjectRoot() + "/symbolic-reasoner/examples/use-case/model/model_config.json";
-const std::string DEFAULT_REASONER_SERVER = "127.0.0.1";
-const std::string DEFAULT_PORT_REASONER_SERVER = "12110";
-const std::string DEFAULT_AUTH_REASONER_SERVER_BASE64 =
-    "cm9vdDphZG1pbg==";  // 'root:admin' in base64
-const std::string DEFAULT_REASONER_DATASTORE_NAME = "ds-test";
-const std::string DEFAULT_REASONER_ORIGIN_SYSTEM_NAME = "SemanticReasoner";
-bool RESET_REASONER_DATASTORE = false;
+
+const std::string MODEL_CONFIGURATION_FILE = getProjectRoot() + "/symbolic-reasoner/examples/driving_style/driving_style_reasoning.json";
+
+std::shared_ptr<rdf_mapper::RdfMapper> createRdfMapper(const ModelConfig& model_config) {
+    const std::filesystem::path model_config_directory =
+        std::filesystem::path(MODEL_CONFIGURATION_FILE).parent_path();
+    std::vector<std::filesystem::path> shape_paths;
+
+    for (const auto& [shape_name, shape_path] : model_config.getRdfShapes()) {
+        std::filesystem::path resolved_shape_path(shape_path);
+        if (resolved_shape_path.is_relative()) {
+            resolved_shape_path = model_config_directory / resolved_shape_path;
+        }
+        resolved_shape_path = resolved_shape_path.lexically_normal();
+        if (!std::filesystem::is_regular_file(resolved_shape_path)) {
+            throw std::runtime_error("Cannot open SHACL file for " + shape_name + ": " +
+                                     resolved_shape_path.string());
+        }
+        shape_paths.push_back(std::move(resolved_shape_path));
+    }
+
+    return std::make_shared<rdf_mapper::RdfMapper>(shape_paths, model_config.getSignals());
+}
+
+// TODO(system-configuration): Move reasoner defaults to a dedicated reasoner service.
+// const std::string DEFAULT_REASONER_SERVER = "127.0.0.1";
+// const std::string DEFAULT_PORT_REASONER_SERVER = "12110";
+// const std::string DEFAULT_AUTH_REASONER_SERVER_BASE64 = "cm9vdDphZG1pbg==";  // 'root:admin' in base64
+// const std::string DEFAULT_REASONER_DATASTORE_NAME = "ds-test";
+
+// TODO(websocket-client): Reasoner setup is owned by the implementation named in reasoner_profile.
+// const std::string DEFAULT_REASONER_ORIGIN_SYSTEM_NAME = "SemanticReasoner";
+// const bool RESET_REASONER_DATASTORE = false;
 
 void printBanner() {
     std::cout << "\033[1;36m"  // Bright blue color
@@ -102,7 +125,8 @@ void displayEnvVariables() {
               << "Port number of the WebSocket server" << std::setw(40)
               << Helper::getEnvVariable("PORT_WEBSOCKET_SERVER", DEFAULT_PORT_WEB_SOCKET_SERVER)
               << "\n";
-
+    /*
+    TODO(system-configuration): Move this output to a dedicated reasoner service configuration.
     std::cout << std::left << std::setw(35) << "TARGET_WEBSOCKET_SERVER" << std::setw(65)
               << "Target URL of the WebSocket server" << std::setw(40)
               << Helper::getEnvVariable("TARGET_WEBSOCKET_SERVER", DEFAULT_TARGET_WEB_SOCKET_SERVER)
@@ -133,6 +157,7 @@ void displayEnvVariables() {
               << Helper::getEnvVariable("REASONER_ORIGIN_SYSTEM_NAME",
                                         DEFAULT_REASONER_ORIGIN_SYSTEM_NAME)
               << "\n";
+    */
 }
 
 void displayHelpXOptions() {
@@ -169,7 +194,8 @@ int main(int argc, char* argv[]) {
             if (i + 1 < argc) {
                 std::string option = argv[++i];
                 if (option == "reset_ds") {
-                    RESET_REASONER_DATASTORE = true;
+                    // TODO(system-configuration): Move reasoner datastore reset handling to its service.
+                    // RESET_REASONER_DATASTORE = true;
                 } else {
                     std::cerr << "Unknown implementation-specific option: " << option << "\n";
                     std::cerr << "Use --help-xoptions for available options.\n";
@@ -189,25 +215,30 @@ int main(int argc, char* argv[]) {
     try {
         // Initialize System Configuration
         SystemConfig system_config = SystemConfigurationService::loadSystemConfig(
-            DEFAULT_HOST_WEB_SOCKET_SERVER, DEFAULT_PORT_WEB_SOCKET_SERVER,
-            DEFAULT_TARGET_WEB_SOCKET_SERVER, DEFAULT_REASONER_SERVER, DEFAULT_PORT_REASONER_SERVER,
-            DEFAULT_AUTH_REASONER_SERVER_BASE64, DEFAULT_REASONER_DATASTORE_NAME,
-            DEFAULT_REASONER_ORIGIN_SYSTEM_NAME);
+            DEFAULT_HOST_WEB_SOCKET_SERVER,
+            DEFAULT_PORT_WEB_SOCKET_SERVER,
+            DEFAULT_TARGET_WEB_SOCKET_SERVER);
+            // TODO(system-configuration): Pass these to the dedicated reasoner service instead.
+            // DEFAULT_REASONER_SERVER,
+            // DEFAULT_PORT_REASONER_SERVER,
+            // DEFAULT_AUTH_REASONER_SERVER_BASE64,
+            // DEFAULT_REASONER_DATASTORE_NAME,
+            // DEFAULT_REASONER_ORIGIN_SYSTEM_NAME);
 
         // Initialize Model Configuration
-        std::shared_ptr<ModelConfig> model_config = std::make_shared<ModelConfig>(
-            SystemConfigurationService::loadModelConfig(MODEL_CONFIGURATION_FILE));
+        const ModelConfig model_config = SystemConfigurationService::loadModelConfig(MODEL_CONFIGURATION_FILE);
+        const auto rdf_mapper = createRdfMapper(model_config);
+        const auto reasoner_service = std::make_shared<ReasonerService>(nullptr, false);  // TODO: Replace nullptr with actual reasoner adapter when available.    
 
-        // Initialize Reasoner Service
-        std::shared_ptr<ReasonerService> reasoner_service = ReasonerFactory::initReasoner(
-            model_config->getReasonerSettings().getInferenceEngine(), system_config.reasoner_server,
-            model_config->getReasonerRules(), model_config->getOntologies(),
-            RESET_REASONER_DATASTORE);
+
+        // TODO(websocket-client): Construct the downstream reasoner from the opaque profile after
+        // its dedicated implementation is available.
+        // std::shared_ptr<ReasonerService> reasoner_service = ReasonerFactory::initReasoner(...);
 
         // Create the WebSocketClient
         std::cout << std::endl << "** Starting Websocket Client **" << std::endl;
-        auto client =
-            std::make_shared<WebSocketClient>(system_config, model_config, reasoner_service);
+        auto client = std::make_shared<WebSocketClient>(system_config, rdf_mapper,
+                                                        model_config.getSignals());
 
         // Initialize the RealWebSocketConnection with the WebSocketClient
         client->initializeConnection();

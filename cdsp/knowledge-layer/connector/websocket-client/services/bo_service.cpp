@@ -25,8 +25,17 @@
  */
 SubscribeMessage BoService::createSubscribeMessage(const std::string& object_id,
                                                    SchemaType schema_type,
-                                                   const std::vector<Node>& nodes) {
+                                                   const std::vector<std::string>& list_data_points) {
+
     MessageHeader subscribe_header(object_id, schema_type);
+    std::vector<Node> nodes;
+
+    nodes.reserve(list_data_points.size());
+    
+    for (const auto &data_point : list_data_points) {
+        nodes.emplace_back(data_point, std::nullopt, Metadata());
+    }
+    
     return {subscribe_header, nodes};
 }
 
@@ -64,7 +73,8 @@ UnsubscribeMessage BoService::createUnsubscribeMessage(const std::string& object
  * @return A GetMessage object initialized with the created MessageHeader and
  * the corresponding nodes.
  */
-GetMessage BoService::createGetMessage(const std::string& object_id, SchemaType schema_type,
+GetMessage BoService::createGetMessage(const std::string& object_id, 
+                                       SchemaType schema_type,
                                        const std::vector<std::string>& list_data_points) {
     MessageHeader get_header(object_id, schema_type);
     std::vector<Node> nodes;

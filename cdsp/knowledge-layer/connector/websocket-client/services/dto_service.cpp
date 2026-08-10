@@ -156,54 +156,35 @@ MetadataDTO DtoService::parseMetadataJsonToDto(const nlohmann::json& metadata_js
  */
 ModelConfigDTO DtoService::parseModelConfigJsonToDto(const nlohmann::json& json) {
     try {
-        if (!json.contains("inputs")) {
-            throw std::invalid_argument("Missing required inputs field in ModelConfigDTO");
+        if (!json.contains("input") || !json.at("input").is_object()) {
+            throw std::invalid_argument("Missing required input object in ModelConfigDTO");
         }
-
-        if (!json.contains("ontologies")) {
-            throw std::invalid_argument("Missing required ontologies field in ModelConfigDTO");
+        if (!json.at("input").contains("signals") || !json.at("input").at("signals").is_array()) {
+            throw std::invalid_argument("Missing required input.signals array in ModelConfigDTO");
         }
-
-        if (!json.contains("output")) {
-            throw std::invalid_argument("Missing required output field in ModelConfigDTO");
+        if (!json.at("input").contains("rdf_shapes") ||
+            !json.at("input").at("rdf_shapes").is_object()) {
+            throw std::invalid_argument("Missing required input.rdf_shapes object in ModelConfigDTO");
         }
-
-        if (!json.contains("rules")) {
-            throw std::invalid_argument("Missing required rules field in ModelConfigDTO");
+        if (!json.contains("reasoner_profile") || !json.at("reasoner_profile").is_string()) {
+            throw std::invalid_argument("Missing required reasoner_profile in ModelConfigDTO");
         }
-
-        if (!json.contains("shacl")) {
-            throw std::invalid_argument("Missing required shacl field in ModelConfigDTO");
-        }
-
-        if (!json.contains("queries")) {
-            throw std::invalid_argument("Missing required queries field in ModelConfigDTO");
-        }
-
-        if (!json.contains("reasoner_settings")) {
-            throw std::invalid_argument(
-                "Missing required reasoner_settings field in ModelConfigDTO");
-        }
-
         ModelConfigDTO model_config_dto;
+        model_config_dto.input.signals =
+            json.at("input").at("signals").get<std::vector<std::string>>();
+        model_config_dto.input.rdf_shapes =
+            json.at("input").at("rdf_shapes").get<std::map<std::string, std::string>>();
+        model_config_dto.reasoner_profile = json.at("reasoner_profile").get<std::string>();
 
-        model_config_dto.inputs = json["inputs"];
-        model_config_dto.ontologies = json["ontologies"];
-        model_config_dto.output = json["output"];
-        model_config_dto.rules = json["rules"];
-        model_config_dto.shacl_shapes = json["shacl"];
-
-        QueriesDTO queries_dto;
-        for (const auto& [key, value] : json["queries"]["triple_assembler_helper"].items()) {
-            queries_dto.triple_assembler_helper[key] = value;
-        }
-
-        queries_dto.reasoning_output_queries_path = json["queries"]["output"];
-        model_config_dto.queries = queries_dto;
-
-        ReasonerSettingsDTO reasoner_settings_dto;
-        reasoner_settings_dto = parseReasonerSettingsJsonToDto(json["reasoner_settings"]);
-        model_config_dto.reasoner_settings = reasoner_settings_dto;
+        // TODO(model-config): Legacy inputs, ontologies, output, queries, rules, SHACL, and
+        // reasoner_settings parsing has moved to the selected downstream reasoner profile.
+        // model_config_dto.inputs = json["inputs"];
+        // model_config_dto.ontologies = json["ontologies"];
+        // model_config_dto.output = json["output"];
+        // model_config_dto.rules = json["rules"];
+        // model_config_dto.shacl_shapes = json["shacl"];
+        // model_config_dto.queries = ...;
+        // model_config_dto.reasoner_settings = parseReasonerSettingsJsonToDto(...);
 
         return model_config_dto;
     } catch (const nlohmann::json::exception& e) {
@@ -219,6 +200,8 @@ ModelConfigDTO DtoService::parseModelConfigJsonToDto(const nlohmann::json& json)
  * @return A ReasonerSettingsDTO object populated with data from the JSON
  * object.
  */
+// TODO(model-config): Move this parser into the downstream reasoner-profile implementations.
+/*
 ReasonerSettingsDTO DtoService::parseReasonerSettingsJsonToDto(
     const nlohmann::json& reasoner_settings_json) {
     ReasonerSettingsDTO dto;
@@ -254,3 +237,4 @@ ReasonerSettingsDTO DtoService::parseReasonerSettingsJsonToDto(
         throw std::invalid_argument("ReasonerSettingsDTO: " + std::string(e.what()));
     }
 }
+*/

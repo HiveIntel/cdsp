@@ -1,9 +1,12 @@
 #include "websocket_client.h"
 
 #include <iostream>
+#include <stdexcept>
 
 #include "helper.h"
 #include "real_websocket_connection.h"
+#include "bo_service.h"
+#include "bo_to_dto.h"
 
 namespace {
 /**
@@ -15,6 +18,7 @@ namespace {
 void Fail(const boost::system::error_code& ec, const std::string& what) {
     std::cerr << what << ": " << ec.message() << "\n";
 }
+
 }  // namespace
 
 /**
@@ -22,8 +26,7 @@ void Fail(const boost::system::error_code& ec, const std::string& what) {
  * connection.
  *
  * This constructor initializes the WebSocketClient with the given configuration and connection
- * interface. It sets up the RDFox adapter and triple assembler using the provided configuration and
- * initializes them.
+ * interface. RDF mapper and signals are initialized by main.cpp and injected here.
  *
  * @param system_config The initialization configuration containing settings for the
  * WebSocketClient.
@@ -31,17 +34,18 @@ void Fail(const boost::system::error_code& ec, const std::string& what) {
  * be used.
  */
 WebSocketClient::WebSocketClient(SystemConfig system_config,
-                                 std::shared_ptr<ModelConfig> model_config,
-                                 std::shared_ptr<ReasonerService> reasoner_service,
+                                 std::shared_ptr<rdf_mapper::RdfMapper> rdf_mapper,
+                                 std::vector<std::string> signals,
                                  std::shared_ptr<WebSocketClientInterface> connection)
     : system_config_(std::move(system_config)),
-      reasoner_service_(std::move(reasoner_service)),
-      model_config_(std::move(model_config)),
       connection_(std::move(connection)),
-      triple_assembler_(model_config_, *reasoner_service_, file_handler_, triple_writer_),
-      request_registry_(std::make_shared<RequestRegistry>()),
-      reasoner_query_service_(std::make_shared<ReasoningQueryService>(reasoner_service_)) {
-    triple_assembler_.initialize();
+      //request_registry_(std::make_shared<RequestRegistry>()),
+      rdf_mapper_(std::move(rdf_mapper)),
+      signals_(std::move(signals)) {
+
+    if (!rdf_mapper_) {
+        throw std::invalid_argument("RDF mapper must be initialized before creating WebSocketClient");
+    }
 }
 
 /**
@@ -106,20 +110,44 @@ void WebSocketClient::handshake(boost::system::error_code error_code) {
         return Fail(error_code, " - Handshake failed:");
     }
 
-    for (const SchemaType& schema_type :
-         model_config_->getReasonerSettings().getSupportedSchemaCollections()) {
-        // Start subscribing to supported schemas
-        const auto object_id = model_config_->getObjectId().at(schema_type);
-        auto data_point_list = model_config_->getInputs().at(schema_type);
+    const std::string object_id = Helper::getEnvVariable("VEHICLE_OBJECT_ID");
+    if (object_id.empty()) {
+        throw std::invalid_argument("The environment variable VEHICLE_OBJECT_ID has not been set");
+    }
+    
+    /*
 
-        MessageService::createAndQueueSubscribeMessage(object_id, schema_type,
-                                                       data_point_list.subscribe,
-                                                       *request_registry_, reply_messages_queue_);
+    MessageService::createAndQueueVehicleSubscribeMessage(object_id, signals_, *request_registry_, reply_messages_queue_);
+
+
+    auto get_message = BoService::createGetMessage(object_id, SchemaType::VEHICLE, signals_);
+    std::cout << "Get Message " << get_message << '\n';
+
+    auto get_message_dtos = BoToDto::convert(get_message);
+
+    for (const auto& get_message_dto : get_message_dtos) {
+        std::cout << "Get Message DTO: " << json(get_message_dto).dump() << '\n';
+        reply_messages_queue_.push_back(json(get_message_dto));
+    }
+    std::cout << " - Handshake succeeded!\n\n";
+    writeReplyMessagesOnQueue();
+    */
+
+    int id = 0;
+
+    auto sub_message = BoService::createSubscribeMessage(object_id, SchemaType::VEHICLE, signals_);
+    std::cout << "Subscribe Message " << sub_message << '\n';
+
+    auto sub_message_dtos = BoToDto::convert(sub_message);
+
+    for (auto& sub_message_dto : sub_message_dtos) {
+        sub_message_dto.id = id++;
+        std::cout << "Subscribe Message DTO: " << json(sub_message_dto).dump() << '\n';
+        reply_messages_queue_.push_back(json(sub_message_dto));
     }
 
-    std::cout << " - Handshake succeeded!\n\n";
-
     writeReplyMessagesOnQueue();
+    std::cout << " - Handshake succeeded!\n\n";
 }
 
 /**
@@ -127,20 +155,30 @@ void WebSocketClient::handshake(boost::system::error_code error_code) {
  *
  * @param message The JSON message to be sent.
  */
-void WebSocketClient::sendMessage(const json& message) { connection_->asyncWrite(message); }
+void WebSocketClient::sendMessage(const json& message) { 
+    connection_->asyncWrite(message); 
+}
+
+
 
 void WebSocketClient::onSendMessage(boost::system::error_code error_code,
                                     std::size_t bytes_transferred) {
+
     if (error_code) {
         Fail(error_code, "write");
         return;
     }
+
     std::cout << "Message sent! " << bytes_transferred << " bytes transferred\n\n";
     connection_->asyncRead();
 }
 
-void WebSocketClient::onReceiveMessage(boost::beast::error_code error_code,
-                                       std::size_t bytes_transferred) {
+
+
+void WebSocketClient::onReceiveMessage(
+    boost::beast::error_code error_code,
+    std::size_t bytes_transferred) {
+
     if (error_code) {
         Fail(error_code, "read");
         return;
@@ -162,41 +200,42 @@ void WebSocketClient::onReceiveMessage(boost::beast::error_code error_code,
  * @param message A shared pointer to the incoming message string to be processed.
  */
 void WebSocketClient::processMessage(const std::shared_ptr<const std::string>& message) {
+   
     response_messages_queue_.push_back(message);
     auto prio_message = *response_messages_queue_.front();
     response_messages_queue_.erase(response_messages_queue_.begin());
 
+    std::cout << "Received message: " << prio_message << std::endl;
+
+    const std::string rdf = rdf_mapper_->mapMessageToRdf(prio_message);
+   
+    if (!rdf.empty()) {
+        std::cout << "Mapped incoming message to RDF:\n" << rdf << std::endl;
+    }
+    
     // Attempt to extract a data message from the priority message
     // or process the status message and log any errors if present
-    const auto data_message =
-        MessageService::getDataOrProcessStatusFromMessage(prio_message, *request_registry_);
+    /*
+    const auto data_message = MessageService::getDataOrProcessStatusFromMessage(prio_message, *request_registry_);
 
+    
     // Process the data message if it is valid
     if (data_message.has_value()) {
-        // If the message is a regular data message, process it as a triple and
-        // handle the reasoning queries
-        triple_assembler_.transformMessageToTriple(data_message.value());
-
-        // Process reasoning query
-        for (const auto& reasoning_output_query : model_config_->getReasoningOutputQueries()) {
-            try {
-                json result = reasoner_query_service_->processReasoningQuery(
-                    reasoning_output_query,
-                    model_config_->getReasonerSettings().isIsAiReasonerInferenceResults(),
-                    model_config_->getOutput() + "/reasoning_output/");
-
-                if (!result.empty()) {
-                    auto data_point_list = model_config_->getInputs();
-
-                    MessageService::createAndQueueSetMessage(
-                        model_config_->getObjectId(), result, *request_registry_,
-                        reply_messages_queue_, system_config_.reasoner_server.origin_system_name);
-                }
-            } catch (const std::exception& e) {
-                std::cerr << "Error processing reasoning query: " << e.what() << std::endl;
+        try {
+            const std::string rdf = rdf_mapper_->mapMessageToRdf(prio_message);
+            if (!rdf.empty()) {
+                std::cout << "Mapped incoming message to RDF:\n" << rdf << std::endl;
             }
+        } catch (const std::exception& e) {
+            std::cerr << "Error mapping message to RDF: " << e.what() << std::endl;
         }
+
+        // TODO(websocket-client): Forward RDF to the downstream reasoner implementation. The
+        // legacy TripleAssembler and shared query path:
+        // triple_assembler_.transformMessageToTriple(data_message.value());
+        // reasoner_query_service_->processReasoningQuery(...);
     }
+    */
 
     if (!reply_messages_queue_.empty()) {
         writeReplyMessagesOnQueue();

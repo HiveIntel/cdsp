@@ -63,6 +63,16 @@ struct ReasonerSettingsDTO {
  * @brief Data Transfer Object for the Model Configuration
  */
 struct ModelConfigDTO {
+    struct InputDTO {
+        std::vector<std::string> signals;
+        std::map<std::string, std::string> rdf_shapes;
+    };
+
+    InputDTO input;
+    std::string reasoner_profile;
+
+    // TODO(model-config): Legacy fields are retained for source compatibility only. The active
+    // parser reads input.signals, input.rdf_shapes, and the opaque reasoner_profile reference.
     std::map<std::string, std::string> inputs;
     std::vector<std::string> ontologies;
     std::string output;
@@ -72,7 +82,9 @@ struct ModelConfigDTO {
     ReasonerSettingsDTO reasoner_settings;
 
     ModelConfigDTO()
-        : inputs(),
+        : input(),
+          reasoner_profile(),
+          inputs(),
           ontologies(),
           output(""),
           queries(),

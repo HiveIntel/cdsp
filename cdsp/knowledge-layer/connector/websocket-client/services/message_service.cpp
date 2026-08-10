@@ -9,6 +9,17 @@
 #include "message_header.h"
 #include "unsubscribe_message_dto.h"
 
+void MessageService::createAndQueueVehicleSubscribeMessage(
+    const std::string& object_id,
+    const std::vector<std::string>& signal_list,
+    RequestRegistry& registry, 
+    std::vector<json>& reply_messages_queue) 
+    {
+    
+    // TODO(websocket-client): The driving-style client currently supports Vehicle signals only.
+    createAndQueueSubscribeMessage(object_id, SchemaType::VEHICLE, signal_list, registry, reply_messages_queue);
+}
+
 /**
  * @brief Creates a SubscribeMessage and queues it for processing.
  *
@@ -24,23 +35,27 @@
  * @param reply_messages_queue A reference to the queue where messages will be
  *                            added for processing.
  */
-void MessageService::createAndQueueSubscribeMessage(const std::string &object_id,
-                                                    const SchemaType &schema_type,
-                                                    const std::vector<std::string> &data_point_list,
-                                                    RequestRegistry &registry,
-                                                    std::vector<json> &reply_messages_queue) {
+void MessageService::createAndQueueSubscribeMessage(
+    const std::string &object_id,
+    const SchemaType &schema_type,
+    const std::vector<std::string> &data_point_list,
+    RequestRegistry &registry,
+    std::vector<json> &reply_messages_queue) 
+    {
+    
     // Create a GetMessage to retrieve all data points for the schema type
     auto get_message = BoService::createGetMessage(object_id, schema_type, data_point_list);
     addMessageToQueue(get_message, registry, reply_messages_queue);
 
     // Start subscribing to data points into the schema type
-    std::vector<Node> nodes;
-    nodes.reserve(data_point_list.size());
-    for (const auto &data_point : data_point_list) {
-        nodes.emplace_back(data_point, std::nullopt, Metadata());
-    }
+    // std::vector<Node> nodes;
+    // nodes.reserve(data_point_list.size());
+    
+    // for (const auto &data_point : data_point_list) {
+    //     nodes.emplace_back(data_point, std::nullopt, Metadata());
+    // }
 
-    auto subscribe_message = BoService::createSubscribeMessage(object_id, schema_type, nodes);
+    auto subscribe_message = BoService::createSubscribeMessage(object_id, schema_type, data_point_list);
     addMessageToQueue(subscribe_message, registry, reply_messages_queue);
 }
 
@@ -182,6 +197,7 @@ std::optional<DataMessage> MessageService::getDataOrProcessStatusFromMessage(
 void MessageService::addMessageToQueue(
     const std::variant<GetMessage, SetMessage, SubscribeMessage, UnsubscribeMessage> &message,
     RequestRegistry &registry, std::vector<json> &reply_messages_queue) {
+    
     std::visit(
         [&reply_messages_queue, &registry](const auto &specific_message) {
             auto dto = BoToDto::convert(specific_message);
@@ -212,6 +228,9 @@ void MessageService::addMessageToQueue(
         },
         message);
 }
+
+
+
 
 /**
  * @brief Parses and displays a JSON-RPC message, returning either a

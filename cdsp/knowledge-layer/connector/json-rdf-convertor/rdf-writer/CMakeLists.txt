@@ -1,6 +1,7 @@
 # Define the rdf-writer library
 add_library(rdf_writer
-    src/triple_assembler.cpp
+    # TODO(model-config): Retired with the shared reasoning ModelConfig fields.
+    # src/triple_assembler.cpp
     src/triple_writer.cpp
 )
 

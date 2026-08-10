@@ -4,7 +4,6 @@
 #include <nlohmann/json.hpp>
 
 #include "dto_service.h"
-#include "dto_to_bo.h"
 #include "file_handler_impl.h"
 #include "helper.h"
 #include "model_config_dto.h"
@@ -12,12 +11,14 @@
 SystemConfig SystemConfigurationService::loadSystemConfig(
     const std::optional<std::string> ws_server_host,
     const std::optional<std::string> ws_server_port,
-    const std::optional<std::string> ws_server_target,
-    const std::optional<std::string> reasoner_server_host,
-    const std::optional<std::string> reasoner_server_port,
-    const std::optional<std::string> reasoner_server_auth_base64,
-    const std::optional<std::string> reasoner_server_data_store_name,
-    const std::optional<std::string>& reasoner_server_origin_system) {
+    const std::optional<std::string> ws_server_target
+    // TODO(system-configuration): Move these parameters to a dedicated reasoner service.
+    // const std::optional<std::string> reasoner_server_host,
+    // const std::optional<std::string> reasoner_server_port,
+    // const std::optional<std::string> reasoner_server_auth_base64,
+    // const std::optional<std::string> reasoner_server_data_store_name,
+    // const std::optional<std::string>& reasoner_server_origin_system
+) {
     SystemConfig system_config;
     system_config.websocket_server.host =
         Helper::getEnvVariable("HOST_WEBSOCKET_SERVER", ws_server_host);
@@ -25,21 +26,23 @@ SystemConfig SystemConfigurationService::loadSystemConfig(
         Helper::getEnvVariable("PORT_WEBSOCKET_SERVER", ws_server_port);
     system_config.websocket_server.target =
         Helper::getEnvVariable("TARGET_WEBSOCKET_SERVER", ws_server_target);
-    system_config.reasoner_server.host =
-        Helper::getEnvVariable("HOST_REASONER_SERVER", reasoner_server_host);
-    system_config.reasoner_server.port =
-        Helper::getEnvVariable("PORT_REASONER_SERVER", reasoner_server_port);
-    system_config.reasoner_server.auth_base64 =
-        Helper::getEnvVariable("AUTH_REASONER_SERVER_BASE64", reasoner_server_auth_base64);
-    system_config.reasoner_server.data_store_name =
-        Helper::getEnvVariable("REASONER_DATASTORE", reasoner_server_data_store_name);
-    system_config.reasoner_server.origin_system_name =
-        Helper::getEnvVariable("REASONER_ORIGIN_SYSTEM_NAME", reasoner_server_origin_system);
+    // TODO(system-configuration): Move reasoner environment loading to a dedicated reasoner service.
+    // system_config.reasoner_server.host =
+    //     Helper::getEnvVariable("HOST_REASONER_SERVER", reasoner_server_host);
+    // system_config.reasoner_server.port =
+    //     Helper::getEnvVariable("PORT_REASONER_SERVER", reasoner_server_port);
+    // system_config.reasoner_server.auth_base64 =
+    //     Helper::getEnvVariable("AUTH_REASONER_SERVER_BASE64", reasoner_server_auth_base64);
+    // system_config.reasoner_server.data_store_name =
+    //     Helper::getEnvVariable("REASONER_DATASTORE", reasoner_server_data_store_name);
+    // system_config.reasoner_server.origin_system_name =
+    //     Helper::getEnvVariable("REASONER_ORIGIN_SYSTEM_NAME", reasoner_server_origin_system);
 
     return system_config;
 }
 
 ModelConfig SystemConfigurationService::loadModelConfig(const std::string& config_file) {
+    // TODO(system-configuration): Move this implementation to a dedicated model configuration service.
     try {
         std::shared_ptr<FileHandlerImpl> file_handler = std::make_shared<FileHandlerImpl>();
 
@@ -53,8 +56,12 @@ ModelConfig SystemConfigurationService::loadModelConfig(const std::string& confi
 
         ModelConfigDTO model_config_dto = DtoService::parseModelConfigJsonToDto(config_json);
         std::cout << " - ModelConfigDTO parsed successfully\n";
-        DtoToBo dto_to_bo(file_handler);
-        const auto model_config = dto_to_bo.convert(model_config_dto);
+        // TODO(model-config): The legacy ModelConfigConverter step is intentionally removed.
+        // DtoToBo dto_to_bo(file_handler);
+        // const auto model_config = dto_to_bo.convert(model_config_dto);
+        const ModelConfig model_config(model_config_dto.input.signals,
+                                       model_config_dto.input.rdf_shapes,
+                                       model_config_dto.reasoner_profile);
         std::cout << " - Model configuration loaded successfully\n\n";
         return model_config;
 

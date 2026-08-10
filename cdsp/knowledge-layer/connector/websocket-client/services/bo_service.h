@@ -14,16 +14,17 @@
 
 class BoService {
    public:
-    static SubscribeMessage createSubscribeMessage(const std::string &object_id,
-                                                   SchemaType schema_type,
-                                                   const std::vector<Node> &nodes);
-
     static UnsubscribeMessage createUnsubscribeMessage(const std::string &object_id,
                                                        SchemaType schema_type,
                                                        const std::vector<Node> &nodes);
 
-    static GetMessage createGetMessage(const std::string &object_id, SchemaType schema_type,
+    static GetMessage createGetMessage(const std::string &object_id,        
+                                       SchemaType schema_type,
                                        const std::vector<std::string> &list_data_points);
+
+    static SubscribeMessage createSubscribeMessage(const std::string &object_id,        
+                                       SchemaType schema_type,
+                                       const std::vector<std::string> &list_data_points);                                       
 
     static std::vector<SetMessage> createSetMessage(
         const std::map<SchemaType, std::string> &object_id, const nlohmann::json &json,

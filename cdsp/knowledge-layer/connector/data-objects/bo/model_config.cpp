@@ -1,8 +1,36 @@
 #include "model_config.h"
 
+#include <utility>
+
 #include "data_types.h"
 #include "helper.h"
 
+ModelConfig::ModelConfig(std::vector<std::string> signals,
+                         std::map<std::string, std::string> rdf_shapes,
+                         std::string reasoner_profile)
+    : signals_(std::move(signals)),
+      rdf_shapes_(std::move(rdf_shapes)),
+      reasoner_profile_(std::move(reasoner_profile)) {
+    if (signals_.empty()) {
+        throw std::invalid_argument("Model configuration signals cannot be empty");
+    }
+    if (rdf_shapes_.empty()) {
+        throw std::invalid_argument("Model configuration RDF shapes cannot be empty");
+    }
+    if (reasoner_profile_.empty()) {
+        throw std::invalid_argument("Model configuration reasoner profile cannot be empty");
+    }
+}
+
+std::vector<std::string> ModelConfig::getSignals() const { return signals_; }
+
+std::map<std::string, std::string> ModelConfig::getRdfShapes() const { return rdf_shapes_; }
+
+std::string ModelConfig::getReasonerProfile() const { return reasoner_profile_; }
+
+// TODO(model-config): Legacy shared-reasoning implementation retired. Downstream reasoner
+// implementations must parse their own profile and should not use ModelConfig for this state.
+#if 0
 /**
  * @brief Constructs a ModelConfig object with the specified parameters.
  *
@@ -297,3 +325,4 @@ std::ostream& operator<<(std::ostream& os, const ModelConfig& config) {
     os << "}";
     return os;
 }
+#endif  // TODO(model-config): Legacy shared-reasoning implementation

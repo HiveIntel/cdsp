@@ -16,8 +16,10 @@ class DtoService {
    private:
     static MetadataDTO parseMetadataJsonToDto(const nlohmann::json& metadata_json);
 
-    static ReasonerSettingsDTO parseReasonerSettingsJsonToDto(
-        const nlohmann::json& reasoner_settings_json);
+    // TODO(model-config): Reasoner settings are parsed by the selected downstream profile,
+    // not by the shared model configuration parser.
+    // static ReasonerSettingsDTO parseReasonerSettingsJsonToDto(
+    //     const nlohmann::json& reasoner_settings_json);
 };
 
 #endif  // DTO_SERVICE_H

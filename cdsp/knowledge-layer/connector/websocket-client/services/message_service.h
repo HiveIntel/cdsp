@@ -21,6 +21,11 @@ using json = nlohmann::json;
 
 class MessageService {
    public:
+    static void createAndQueueVehicleSubscribeMessage(const std::string& object_id,
+                                                      const std::vector<std::string>& signal_list,
+                                                      RequestRegistry& registry,
+                                                      std::vector<json>& reply_messages_queue);
+
     static void createAndQueueSubscribeMessage(const std::string &object_id,
                                                const SchemaType &schema_type,
                                                const std::vector<std::string> &data_point_list,

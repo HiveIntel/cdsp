@@ -10,7 +10,8 @@ add_library(websocket_client
     services/dto_service.cpp
     services/converters/data_message_converter.cpp
     services/converters/status_message_converter.cpp
-    services/converters/model_config_converter.cpp
+    # TODO(model-config): Retired; ModelConfig is constructed directly from ModelConfigDTO.
+    # services/converters/model_config_converter.cpp
     services/converters/utils/converter_helper.cpp
 )
 
@@ -30,9 +31,11 @@ target_link_libraries(websocket_client
     PUBLIC 
         nlohmann_json::nlohmann_json
         data_objects
-        rdf_writer
-        rdf_services
-        reasoner
+        rdf_mapper
+        # TODO(websocket-client): The client no longer owns TripleAssembler or ReasonerService.
+        # rdf_writer
+        # rdf_services
+        # reasoner
         websocket_client_runtime
         common
     PRIVATE  
