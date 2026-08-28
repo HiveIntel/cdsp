@@ -1,0 +1,6 @@
+{
+    "name":"RDF4J",
+    "ontologies": "driving_style_ontology.ttl",
+    "rules": "driving_style_rules.ttl",
+    "query": "driving_style_query.rq"
+}
