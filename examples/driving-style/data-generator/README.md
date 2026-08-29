@@ -60,7 +60,7 @@ The generator accepts no arguments. It validates every `scenes/*.json` file
 before writing output.
 
 ```bash
-python3 generate_sample_data.py
+python3 generate_stream.py
 ```
 
 For every scene it writes ignored generated files:

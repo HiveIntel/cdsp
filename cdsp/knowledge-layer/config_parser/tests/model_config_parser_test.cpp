@@ -12,7 +12,7 @@ namespace {
 
 const std::filesystem::path kDrivingStyleConfig =
     std::filesystem::path(PROJECT_ROOT).parent_path().parent_path() /
-    "examples/driving-style/driving_style_reasoning.json";
+    "examples/driving-style/model/driving_style_reasoning.json";
 
 }  // namespace
 
@@ -25,10 +25,10 @@ TEST(ModelConfigParserTest, ParsesDrivingStyleConfiguration) {
                                         "CurrentLocation.Longitude",
                                         "Speed"}));
     EXPECT_EQ(configuration.getRdfShapes(),
-              (std::map<std::string, std::string>{{"signal", "signals_shapes.shacl.ttl"},
-                                                  {"vehicle", "vehicle_shape.shacl.ttl"}}));
+              (std::map<std::string, std::string>{{"signal", "shapes/signals_shapes.shacl.ttl"},
+                                                  {"vehicle", "shapes/vehicle_shape.shacl.ttl"}}));
     EXPECT_EQ(configuration.getReasonerProfile(),
-              "solution_rdf4j/driving_style_rdf4j.json");
+              "../solutions/rdf4j/driving_style_rdf4j.json");
 }
 
 TEST(ModelConfigParserTest, RejectsMissingRequiredFields) {

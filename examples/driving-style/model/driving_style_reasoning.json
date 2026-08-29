@@ -7,9 +7,9 @@
         "Speed"
       ],
       "rdf_shapes":{
-        "vehicle":"vehicle_shape.shacl.ttl",
-        "signal":"signals_shapes.shacl.ttl"
+        "vehicle":"shapes/vehicle_shape.shacl.ttl",
+        "signal":"shapes/signals_shapes.shacl.ttl"
       }
     },
-    "reasoner_profile":"solution_rdf4j/driving_style_rdf4j.json"
+    "reasoner_profile":"../solutions/rdf4j/driving_style_rdf4j.json"
 }

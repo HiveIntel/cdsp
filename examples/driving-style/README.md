@@ -1,25 +1,52 @@
-# Driving-Style Reasoning Example
+# Driving-style reasoning example
 
-`driving_style_reasoning.json` is the model configuration used by the client.
-It declares vehicle signals, SHACL files, and one `reasoner_profile` link.
+This example keeps each artifact by its runtime role:
 
-## RDF4J profile
+```text
+driving-style/
+├── model/                 # client model configuration and RDF input shapes
+│   ├── driving_style_reasoning.json
+│   └── shapes/
+├── solutions/             # one reasoning profile per engine
+│   ├── cqels/
+│   └── rdf4j/
+├── data-generator/        # scene definitions, generator, and stream player
+├── launch/                # isolated IL/KL launch artifacts
+└── README.md
+```
 
-`solution_rdf4j/driving_style_rdf4j.json` selects RDF4J and references:
+`model/driving_style_reasoning.json` is the entry configuration. It declares
+the VSS signals, the SHACL shapes in `model/shapes/`, and the selected reasoner
+profile. Paths are resolved relative to the configuration/profile that contains
+them.
 
-- `driving_style_ontology.ttl`
-- `driving_style_rules.ttl`
-- `driving_style_query.rq`
+The RDF4J profile is at
+`solutions/rdf4j/driving_style_rdf4j.json`; CQELS has its equivalent under
+`solutions/cqels/`. Engine runtime integration is still placeholder-only, so
+the example currently validates configuration and client wiring rather than
+executing inference.
 
-## CQELS profile
-
-`solution_cqels/driving_style_cqels.json` selects CQELS and references its
-continuous query. Ontology and rule fields are optional for profiles that do
-not need them.
-
-The profile parser resolves all of these paths relative to the profile JSON.
-RDF4J and CQELS integration code is currently placeholder-only, so this example
-validates configuration and wiring but does not execute reasoning yet.
-
-Use the [data simulator](data_simulator/README.md) to generate and replay sample
+Use the [data generator](data-generator/README.md) to create and replay sample
 vehicle data.
+
+## Isolated launchers
+
+The launcher artifacts are intentionally separate from the default CDSP Docker
+Compose stack:
+
+- `launch/launch_information_layer.sh` first checks the configured WebSocket
+  endpoint (`127.0.0.1:8080` by default). If it is reachable, it leaves that
+  endpoint unchanged; otherwise it starts only the IL and IoTDB stack.
+- `launch/launch_knowledge_layer.sh` runs the IL check, exports a clean KL
+  source snapshot, stages `model/` and `solutions/` at the paths expected by
+  that snapshot, then builds and starts KL.
+
+From the repository root:
+
+```bash
+examples/driving-style/launch/launch_knowledge_layer.sh
+```
+
+The default vehicle instance is `VIN_1805`, matching the generator. Set
+`VEHICLE_OBJECT_ID`, `HOST_WEBSOCKET_SERVER`, or `PORT_WEBSOCKET_SERVER` to
+override the endpoint settings. `KL_SOURCE_REF` selects another local Git ref.
