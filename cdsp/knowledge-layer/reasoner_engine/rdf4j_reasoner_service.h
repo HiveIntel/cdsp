@@ -6,25 +6,26 @@
 
 #include "reasoner_service_pull.h"
 
-// RDF4J will use the pull workflow once its engine integration is implemented.
+// Pull-based adapter for the standalone RDF4J HTTP service.
 class RDF4JReasonerService final : public ReasonerServicePull {
    public:
     using ReasonerServicePull::ReasonerServicePull;
 
    protected:
-    // This placeholder accepts a profile but intentionally performs no RDF4J work yet.
-    bool initializeReasoner() override { return true; }
+    bool initializeReasoner() override;
+    bool updateDataInReasoner(const std::string& data,
+                              const ReasonerSyntaxType& content_type) override;
+    std::vector<nlohmann::json> queryReasoner() override;
+    bool updateRulesInReasoner(const std::vector<std::string>& rule_file_paths) override;
+    bool updateOntologyInReasoner(const std::vector<std::string>& ontology_file_paths) override;
 
-    bool updateDataInReasoner(const std::string&,
-                              const ReasonerSyntaxType&) override {
-        return false;
-    }
-
-    std::vector<nlohmann::json> queryReasoner() override { return {}; }
-
-    bool updateRulesInReasoner(const std::vector<std::string>&) override { return false; }
-
-    bool updateOntologyInReasoner(const std::vector<std::string>&) override { return false; }
+   private:
+    std::string request(const std::string& method,
+                        const std::string& target,
+                        const std::string& content_type,
+                        const std::string& accept,
+                        const std::string& body) const;
+    std::string datastoreTarget(const std::string& suffix = "") const;
 };
 
 #endif  // RDF4J_REASONER_SERVICE_H

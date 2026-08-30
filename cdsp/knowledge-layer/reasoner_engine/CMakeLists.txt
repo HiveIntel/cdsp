@@ -1,4 +1,5 @@
 add_library(reasoner_engine
+    rdf4j_reasoner_service.cpp
     reasoner_factory.cpp
     reasoner_profile.cpp
 )
@@ -11,5 +12,6 @@ target_include_directories(reasoner_engine
 target_link_libraries(reasoner_engine
     PUBLIC
         nlohmann_json::nlohmann_json
-        utils
+    PRIVATE
+        Boost::system
 )

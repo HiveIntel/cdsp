@@ -39,21 +39,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(pugixml)
 
-# ########################
-# geographiclib dependency
-# ########################
-
-# Include directories for third-party libraries
-include_directories(${CMAKE_SOURCE_DIR}/third_party/GeographicLib/include)
-
-# Add the GeographicLib source files to the project
-add_library(geographiclib STATIC
-    ${CMAKE_SOURCE_DIR}/third_party/GeographicLib/src/EllipticFunction.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/GeographicLib/src/Math.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/GeographicLib/src/TransverseMercator.cpp
-    ${CMAKE_SOURCE_DIR}/third_party/GeographicLib/src/TransverseMercatorExact.cpp
-)
-
 # #####################
 # serd-cmake dependency
 # #####################
@@ -105,33 +90,19 @@ add_compile_definitions(TEST_OUTPUT_DIR="${TEST_OUTPUT_DIR}")
 enable_testing()
 
 # Add subdirectories for project modules and tests
-add_subdirectory(common)
-add_subdirectory(common-test-resources)
-add_subdirectory(connector/json-rdf-convertor/json-writer)
-add_subdirectory(connector/json-rdf-convertor/json-writer/tests)
-add_subdirectory(connector/json-rdf-convertor/rdf-writer)
-add_subdirectory(connector/json-rdf-convertor/rdf-writer/tests)
-add_subdirectory(connector/json-rdf-convertor/rdf-writer/tests/serd_library_tests)
-add_subdirectory(connector/json-rdf-convertor/services)
-add_subdirectory(connector/json-rdf-convertor/services/tests)
-add_subdirectory(connector/data-objects)
-add_subdirectory(connector/utils)
+add_subdirectory(il_message)
+add_subdirectory(il_message/tests)
 add_subdirectory(rdf-mapper)
+add_subdirectory(config_parser)
+add_subdirectory(config_parser/tests)
 add_subdirectory(reasoner_engine)
-add_subdirectory(reasoner_engine/tests)
-add_subdirectory(connector/websocket-client)
-add_subdirectory(connector/websocket-client/runtime)
-add_subdirectory(connector/websocket-client/services/tests)
-add_subdirectory(symbolic-reasoner)
-add_subdirectory(symbolic-reasoner/rdfox/tests)
-add_subdirectory(symbolic-reasoner/rdfox/tests/rdfox-service-test)
-add_subdirectory(symbolic-reasoner/services/tests)
+add_subdirectory(il_connection)
 
-# Define the main executable target
-add_executable(reasoner_client connector/websocket-client/src/main.cpp)
-
-# Link the websocket_client library to main
-target_link_libraries(reasoner_client
-    PRIVATE 
-        websocket_client
+add_executable(driving_style_client src/main.cpp)
+target_link_libraries(driving_style_client
+    PRIVATE
+        config_parser
+        il_connection
+        rdf_mapper
+        reasoner_engine
 )

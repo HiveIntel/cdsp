@@ -7,10 +7,17 @@
 
 // Normalized configuration loaded from a reasoner-profile JSON file.
 struct ReasonerProfile {
+    struct Endpoint {
+        std::string host = "127.0.0.1";
+        unsigned short port = 12110;
+        std::string datastore = "driving-style";
+    };
+
     std::string name;
     std::vector<std::filesystem::path> ontologies;
     std::vector<std::filesystem::path> rules;
     std::vector<std::filesystem::path> queries;
+    Endpoint endpoint;
 };
 
 class ReasonerProfileParser {

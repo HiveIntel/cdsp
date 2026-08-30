@@ -12,3 +12,8 @@ target_include_directories(il_message
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+target_link_libraries(il_message
+    PUBLIC
+        nlohmann_json::nlohmann_json
+)

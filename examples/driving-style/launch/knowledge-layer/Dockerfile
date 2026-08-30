@@ -29,17 +29,11 @@ RUN wget https://archives.boost.io/release/1.87.0/source/boost_1_87_0.tar.gz \
 
 WORKDIR /src
 
-COPY cdsp/knowledge-layer/connector connector
-COPY cdsp/knowledge-layer/symbolic-reasoner symbolic-reasoner
-COPY cdsp/knowledge-layer/third_party third_party
-COPY cdsp/knowledge-layer/common-test-resources common-test-resources
-COPY cdsp/knowledge-layer/common common
-COPY cdsp/knowledge-layer/CMakeLists.txt .
-COPY model symbolic-reasoner/examples/driving_style
-COPY solutions symbolic-reasoner/examples/solutions
+COPY cdsp/knowledge-layer /src/cdsp/knowledge-layer
+COPY examples/driving-style /src/examples/driving-style
 
-WORKDIR /src/build
+WORKDIR /src/cdsp/knowledge-layer
+RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+  && cmake --build build --target driving_style_client -j8
 
-RUN cmake -DCMAKE_BUILD_TYPE=Release .. && make reasoner_client -j8
-
-ENTRYPOINT ["/src/build/bin/reasoner_client"]
+ENTRYPOINT ["/src/cdsp/knowledge-layer/build/bin/driving_style_client", "/src/examples/driving-style/model/driving_style_reasoning.json"]

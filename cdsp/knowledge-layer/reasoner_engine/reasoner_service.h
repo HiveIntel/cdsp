@@ -8,8 +8,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "data_types.h"
 #include "reasoner_profile.h"
+#include "reasoner_syntax_type.h"
 
 class ReasonerService {
    public:

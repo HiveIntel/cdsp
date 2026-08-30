@@ -84,6 +84,42 @@ std::vector<std::filesystem::path> parseProfileResources(
     return resources;
 }
 
+ReasonerProfile::Endpoint parseEndpoint(const nlohmann::json& profile_json) {
+    ReasonerProfile::Endpoint endpoint;
+    if (!profile_json.contains("endpoint")) {
+        return endpoint;
+    }
+
+    const auto& endpoint_json = profile_json.at("endpoint");
+    if (!endpoint_json.is_object()) {
+        throw std::invalid_argument("Reasoner profile field 'endpoint' must be an object.");
+    }
+    if (endpoint_json.contains("host")) {
+        if (!endpoint_json.at("host").is_string() || endpoint_json.at("host").get<std::string>().empty()) {
+            throw std::invalid_argument("Reasoner endpoint host must be a non-empty string.");
+        }
+        endpoint.host = endpoint_json.at("host").get<std::string>();
+    }
+    if (endpoint_json.contains("port")) {
+        if (!endpoint_json.at("port").is_number_unsigned()) {
+            throw std::invalid_argument("Reasoner endpoint port must be an unsigned integer.");
+        }
+        const auto port = endpoint_json.at("port").get<unsigned int>();
+        if (port == 0 || port > 65535) {
+            throw std::invalid_argument("Reasoner endpoint port must be in range 1..65535.");
+        }
+        endpoint.port = static_cast<unsigned short>(port);
+    }
+    if (endpoint_json.contains("datastore")) {
+        if (!endpoint_json.at("datastore").is_string() ||
+            endpoint_json.at("datastore").get<std::string>().empty()) {
+            throw std::invalid_argument("Reasoner endpoint datastore must be a non-empty string.");
+        }
+        endpoint.datastore = endpoint_json.at("datastore").get<std::string>();
+    }
+    return endpoint;
+}
+
 }  // namespace
 
 ReasonerProfile ReasonerProfileParser::parse(const std::filesystem::path& profile_file_path) {
@@ -121,6 +157,7 @@ ReasonerProfile ReasonerProfileParser::parse(const std::filesystem::path& profil
                                               resolved_profile_path.parent_path(), false);
         profile.queries = parseProfileResources(profile_json, "query",
                                                 resolved_profile_path.parent_path(), true);
+        profile.endpoint = parseEndpoint(profile_json);
         return profile;
     } catch (const nlohmann::json::exception& error) {
         throw std::invalid_argument("Invalid reasoner profile JSON: " + std::string(error.what()));
