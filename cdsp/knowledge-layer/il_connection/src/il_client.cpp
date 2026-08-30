@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "real_websocket_connection.h"
+#include "il_message/set_request.h"
 #include "il_message/subscribe_request.h"
 
 namespace {
@@ -46,7 +47,6 @@ InformationLayerClient::InformationLayerClient(
             "Reasoner service must be initialized before creating InformationLayerClient.");
     }
 
-    reasoner_service_->setReasoningResultMessageQueue(reply_messages_queue_);
 }
 
 void InformationLayerClient::initializeConnection() {
@@ -94,14 +94,15 @@ void InformationLayerClient::handshake(boost::system::error_code error_code) {
     if (vehicle_object_id == nullptr || *vehicle_object_id == '\0') {
         throw std::invalid_argument("The environment variable VEHICLE_OBJECT_ID has not been set.");
     }
+    vehicle_instance_ = vehicle_object_id;
 
     std::vector<json> requests;
     requests.reserve(signals_.size());
     for (const auto& signal : signals_) {
         const il_message::SubscribeRequest subscribe_request(
-            vehicle_object_id,
+            vehicle_instance_,
             il_message::Node{signal},
-            {il_message::ResponseFormat::FLAT, il_message::ResponseRoot::RELATIVE});
+            {il_message::ResponseFormat::FLAT, il_message::ResponseRoot::ABSOLUTE});
         requests.push_back(il_message::to_json(subscribe_request));
     }
     queueRequests(std::move(requests));
@@ -175,7 +176,16 @@ void InformationLayerClient::processMessage(const std::shared_ptr<const std::str
 }
 
 void InformationLayerClient::enqueueReasoningResult(json result) {
-    reply_messages_queue_.push_back(std::move(result));
+    if (vehicle_instance_.empty()) {
+        std::cerr << "Dropping reasoner result before IL subscription setup.\n";
+        return;
+    }
+    const il_message::SetRequest inference_result{
+        vehicle_instance_,
+        il_message::Node{"InferenceResults", result.dump()},
+        il_message::SetOptions{std::string{"AI.Reasoner"}, il_message::SyncMode::REMOTE,
+                               std::nullopt}};
+    reply_messages_queue_.push_back(il_message::to_json(inference_result));
     startNextReplyWrite();
 }
 
