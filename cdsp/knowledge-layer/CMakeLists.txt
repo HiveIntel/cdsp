@@ -90,19 +90,19 @@ add_compile_definitions(TEST_OUTPUT_DIR="${TEST_OUTPUT_DIR}")
 enable_testing()
 
 # Add subdirectories for project modules and tests
-add_subdirectory(il_message)
-add_subdirectory(il_message/tests)
+add_subdirectory(il_request)
+add_subdirectory(il_request/tests)
 add_subdirectory(rdf-mapper)
-add_subdirectory(config_parser)
-add_subdirectory(config_parser/tests)
-add_subdirectory(reasoner_engine)
-add_subdirectory(il_connection)
+add_subdirectory(config-parser)
+add_subdirectory(config-parser/tests)
+add_subdirectory(reasoner-engine)
+add_subdirectory(il-connection)
 
 add_executable(driving_style_client src/main.cpp)
 target_link_libraries(driving_style_client
     PRIVATE
-        config_parser
-        il_connection
+        config-parser
+        il-connection
         rdf_mapper
-        reasoner_engine
+        reasoner-engine
 )

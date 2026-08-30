@@ -5,7 +5,7 @@ Date: 2026-08-30
 
 ## Context
 
-The active path is `il_connection -> rdf_mapper -> reasoner_engine`; it does
+The active path is `il-connection -> rdf_mapper -> reasoner-engine`; it does
 not include the legacy connector, BO/DTO model, TripleAssembler, common test
 fixtures, or GeographicLib. The former global Docker service builds the
 removed `reasoner_client` / RDFox pipeline.

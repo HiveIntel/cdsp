@@ -48,8 +48,6 @@ int main(int argc, char* argv[]) {
             model.getSignals(), 
             reasoner);
 
-            
-
         client->initializeConnection();
         client->run();
         return EXIT_SUCCESS;
