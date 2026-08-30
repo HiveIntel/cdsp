@@ -90,8 +90,8 @@ add_compile_definitions(TEST_OUTPUT_DIR="${TEST_OUTPUT_DIR}")
 enable_testing()
 
 # Add subdirectories for project modules and tests
-add_subdirectory(il_request)
-add_subdirectory(il_request/tests)
+add_subdirectory(il-request)
+add_subdirectory(il-request/tests)
 add_subdirectory(rdf-mapper)
 add_subdirectory(config-parser)
 add_subdirectory(config-parser/tests)

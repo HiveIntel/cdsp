@@ -13,7 +13,7 @@ target_include_directories(il-connection
 target_link_libraries(il-connection
     PUBLIC
         nlohmann_json::nlohmann_json
-        il_request
+        il-request
         rdf_mapper
         reasoner-engine
     PRIVATE

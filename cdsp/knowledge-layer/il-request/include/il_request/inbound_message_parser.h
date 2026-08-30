@@ -1,5 +1,5 @@
-#ifndef IL_MESSAGE_INBOUND_MESSAGE_PARSER_H
-#define IL_MESSAGE_INBOUND_MESSAGE_PARSER_H
+#ifndef IL_REQUEST_INBOUND_MESSAGE_PARSER_H
+#define IL_REQUEST_INBOUND_MESSAGE_PARSER_H
 
 #include <string_view>
 
@@ -19,4 +19,4 @@ class InboundMessageParser {
 
 }  // namespace il_request
 
-#endif  // IL_MESSAGE_INBOUND_MESSAGE_PARSER_H
+#endif  // IL_REQUEST_INBOUND_MESSAGE_PARSER_H

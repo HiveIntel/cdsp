@@ -1,5 +1,5 @@
-#ifndef IL_MESSAGE_UNSUBSCRIBE_REQUEST_H
-#define IL_MESSAGE_UNSUBSCRIBE_REQUEST_H
+#ifndef IL_REQUEST_UNSUBSCRIBE_REQUEST_H
+#define IL_REQUEST_UNSUBSCRIBE_REQUEST_H
 
 #include <optional>
 #include <ostream>
@@ -30,4 +30,4 @@ nlohmann::json to_json(const UnsubscribeRequest& request);
 
 }  // namespace il_request
 
-#endif  // IL_MESSAGE_UNSUBSCRIBE_REQUEST_H
+#endif  // IL_REQUEST_UNSUBSCRIBE_REQUEST_H

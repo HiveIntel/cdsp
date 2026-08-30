@@ -1,5 +1,5 @@
-#ifndef IL_MESSAGE_INBOUND_MESSAGE_DTO_H
-#define IL_MESSAGE_INBOUND_MESSAGE_DTO_H
+#ifndef IL_REQUEST_INBOUND_MESSAGE_DTO_H
+#define IL_REQUEST_INBOUND_MESSAGE_DTO_H
 
 #include <cstdint>
 #include <optional>
@@ -37,4 +37,4 @@ using InboundMessageDto = std::variant<DataMessageDto, StatusMessageDto>;
 
 }  // namespace il_request
 
-#endif  // IL_MESSAGE_INBOUND_MESSAGE_DTO_H
+#endif  // IL_REQUEST_INBOUND_MESSAGE_DTO_H

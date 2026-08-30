@@ -1,5 +1,5 @@
-#ifndef IL_MESSAGE_REQUEST_H
-#define IL_MESSAGE_REQUEST_H
+#ifndef IL_REQUEST_REQUEST_H
+#define IL_REQUEST_REQUEST_H
 
 #include <string>
 #include <string_view>
@@ -38,4 +38,4 @@ class Request {
 
 }  // namespace il_request
 
-#endif  // IL_MESSAGE_REQUEST_H
+#endif  // IL_REQUEST_REQUEST_H

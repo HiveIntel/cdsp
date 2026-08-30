@@ -1,5 +1,5 @@
-#ifndef IL_MESSAGE_NODE_H
-#define IL_MESSAGE_NODE_H
+#ifndef IL_REQUEST_NODE_H
+#define IL_REQUEST_NODE_H
 
 #include <chrono>
 #include <cstdint>
@@ -53,4 +53,4 @@ class Node {
 
 }  // namespace il_request
 
-#endif  // IL_MESSAGE_NODE_H
+#endif  // IL_REQUEST_NODE_H

@@ -12,7 +12,8 @@ Information Layer WebSocket
 
 ## Modules
 
-- il_request: outbound JSON-RPC requests and inbound data/status DTO parsing.
+- il-request: outbound JSON-RPC requests and inbound data/status DTO parsing
+  (`il_request` is its C++ include path and namespace).
 - il-connection: serialized WebSocket transport and subscriptions.
 - rdf-mapper: VSS response to SHACL-backed RDF mapping.
 - config-parser: driving-style model configuration.
@@ -33,3 +34,6 @@ tools/run-driving-style-client.sh
 
 The deterministic data generator and Information Layer launcher are described
 in the driving-style example README.
+
+See the [architecture and class diagrams](../../__docs/knowledge-layer-architecture.md)
+for module responsibilities, ownership, and the runtime data flow.
