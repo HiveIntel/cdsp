@@ -135,20 +135,5 @@ services:
     volumes_from:
       - tmp
 
-# Knowledge Layer Server 
-  knowledge-layer:
-    build:
-      context: ../cdsp/knowledge-layer
-      dockerfile: Dockerfile
-    container_name: knowledge-layer
-    entrypoint: ["/src/build/bin/reasoner_client"]
-    depends_on:
-      rdfox-service:
-        condition: service_started
-      information-layer:
-        condition: service_started
-    env_file:
-      - .env
-
 volumes:
   rdfox-server-directory:

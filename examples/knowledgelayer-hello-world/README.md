@@ -21,7 +21,10 @@ In this use case, we have implemented an AI-powered solution to detect aggressiv
 
 ## How?
 
-Live VSS data from the current drive made accessible in the [Information Layer Server](../../cdsp/information-layer/README.md) via [Websocket](../../cdsp/information-layer/router/src/websocket-server.ts) are converted by a [JSON-RDF-Convertor](../../cdsp/knowledge-layer/connector/README.md) in real-time into a graph data format ([RDF](https://www.w3.org/RDF/)) and stored within the Knowledge Layer in a [Knowledge Graph](https://en.wikipedia.org/wiki/Knowledge_Graph). At any point, every data point (needed for the use case) in the Information Layer has a graph representation. This data representation allows us to attach a [symbolic reasoner](../../cdsp/knowledge-layer/symbolic-reasoner/README.md) ([RDFox](../../cdsp/knowledge-layer/symbolic-reasoner/rdfox/README.md)) to the Knowledge Graph, which can link, evaluate, and infer new facts based on rules, such as deriving the driving style. As soon as an aggressive driving style is detected, the result is converted back from the graph data format to an Information Layer tree format in real time and, in our case, stored in the appropriate data field in the VSS tree.  The information "aggressive driving style" can then be shared with other interested applications for example via a data sync middleware.
+This document describes the former JSON-RDF-Convertor/RDFox prototype. That
+runtime was retired with the legacy connector. Use the maintained
+[driving-style](../driving-style/README.md) example instead: it maps Information
+Layer WebSocket data to RDF and evaluates it through the RDF4J HTTP reasoner.
 
 ### Implementation Details
 
@@ -31,11 +34,12 @@ Live VSS data from the current drive made accessible in the [Information Layer S
 - **DB Handler:** [IoTDB](../../cdsp/information-layer/handlers/src/iotdb/README.md) - Abstracts data store details
 - **DB Router:** [WebSocket Server](../../cdsp/information-layer/router/src/websocket-server.ts) - Provides read,
 write and subscribe capabilities to VSS data via a websocket server
-- **Connector:** [Knowledge Layer Connector](../../cdsp/knowledge-layer/connector/README.md) - Connects Knowledge Layer to Information Layer via websocket client and manages data tasks within Knowledge Layer
-- **Convertor:** [JSON-RDF-Converter](../../cdsp/knowledge-layer/connector/json-rdf-convertor/README.md) - Converts tree-like data (json) into graph data (RDF) and vice versa
-- **Reasoner Adapter:** [RDFox Adaptor](../../cdsp/knowledge-layer/symbolic-reasoner/README.md) - Converts tree-like data (json) into graph data (RDF) and vice versa
+- **Connector:** [Knowledge Layer](../../cdsp/knowledge-layer/README.md) - Uses
+  `WebSocketClient -> RdfMapper -> ReasonerService`.
+- **Reasoner Adapter:** RDF4J HTTP service.
 - **Rules Language:** [Datalog](https://en.wikipedia.org/wiki/Datalog) - Allows describing IF-ELSE like rules in data-near language
-- **Knowledge Graph and Reasoner:** [RDFox](../../cdsp/knowledge-layer/symbolic-reasoner/rdfox/README.md) - Stores the transformed and newly generated graph data, reasons based on rules and graph data, potentially inferring new graph data
+- **Knowledge Graph and Reasoner:** RDF4J - Stores transformed data and applies
+  the configured rules.
 
 ![The Use Case in a DIKW,logical and implementation view](KL-example-readme-graphic.png)
 
@@ -56,15 +60,14 @@ Derived output data:
 
 ## Installation and Running
 
-### Remotive Labs and RDFOX Credentials Setup
+### Archived setup
 
 1. Create a [Remotive Labs](https://remotivelabs.com/) account.
 2. Navigate to `Recordings`, select `Night drive to Luftkastellet`, and start the recording with the `Play` button. Wait until it starts playing, then stop the recording for now. This creates a broker for you, and we need its credentials next.
 3. Navigate to the `Brokers` section and open `My personal broker`.
 4. Copy the URL and API key to the environment variables in the [.env](.env) file: `REMOTIVE_LABS_BROKER_URL` and `REMOTIVE_LABS_BROKER_API_KEY`.
 5. Configure the Information Layer with the respective database you want to use, e.g. IoTDB, by adding another `.env` file like described [here](../../cdsp/information-layer/handlers/src/README.md).
-6. You need to acquire the `RDFox.lic` license file from [Oxford Semantic Technologies](https://www.oxfordsemantic.tech/).
-7. Place it in the folder [examples/shared-config/rdfox](../shared-config/rdfox).
+6. The former RDFox-specific steps are no longer applicable.
 
 ### Run Use Case
 
@@ -72,17 +75,7 @@ Derived output data:
 2. Select `Night drive to Luftkastellet` in the `Recordings` section, open the `Files` tab, and drag and drop the zip file `examples/shared-config/remotive-labs/config_vss_aggressive_driving.zip` into the `Signal Transformations` section.
 3. Navigate to the `Playback` tab, select `config_vss_aggressive_driving` as the `signal transformation`, and press the `Play` button.
 4. If the recording starts playing, stop it for now to proceed with setup.
-5. Start all services with a single terminal command from the current folder ([knowledgelayer-hello-world]()). Make sure you have installed `Docker` and `Docker Compose`.
-   ```bash
-   docker compose up
-   ```
-6. Wait until all containers are created and started.
-7. Continue playing the `Night drive to Luftkastellet` on `Remotive Labs` page. You should see a lot of logs in the terminal indicating that data is flowing. 
-8. Knowledge Layer will generate triples in [KL-config/output/triples](KL-config/output/triples) folder and the reasoner responses that are send to Information Layer in [KL-config/output/reasoning_output](KL-config/output/reasoning_output)
-9. To stop and delete the docker containers you can use
-  ```bash
-  docker compose down
-  ```
+5. Follow the runnable instructions in [driving-style](../driving-style/README.md).
 ---
 
 Feel free to explore the components and rules used in this "Hello World" example to understand the basic implementation of the Knowledge Layer. You can extend this use case to more complex scenarios and even adapt it to different domains.

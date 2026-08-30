@@ -1,3 +1,0 @@
-Vehicle.Chassis.SteeringWheel.Angle
-Vehicle.CurrentLocation
-Vehicle.Speed
