@@ -59,7 +59,7 @@ classDiagram
         +asyncWrite(json)
         +asyncRead()
     }
-    class RealWebSocketConnection {
+    class AbstractWebSocketConnection {
         +asyncResolve(host, port)
         +asyncConnect()
         +asyncHandshake()
@@ -110,8 +110,8 @@ classDiagram
     ModelConfigParser --> ModelConfig
     DrivingStyleClient --> InformationLayerClient
     InformationLayerClient o--> WebSocketClientInterface
-    RealWebSocketConnection ..|> WebSocketClientInterface
-    InformationLayerClient --> RealWebSocketConnection : default transport
+    AbstractWebSocketConnection ..|> WebSocketClientInterface
+    InformationLayerClient --> AbstractWebSocketConnection : default transport
     InformationLayerClient --> InboundMessageParser
     Request <|-- GetRequest
     Request <|-- SetRequest

@@ -1,5 +1,5 @@
 add_library(il-connection
-    src/real_websocket_connection.cpp
+    src/abstract_websocket_connection.cpp
     src/il_client.cpp
 )
 

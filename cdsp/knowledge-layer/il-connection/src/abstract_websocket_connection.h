@@ -1,5 +1,5 @@
-#ifndef IL_CONNECTION_REAL_WEBSOCKET_CONNECTION_H
-#define IL_CONNECTION_REAL_WEBSOCKET_CONNECTION_H
+#ifndef IL_CONNECTION_ABSTRACT_WEBSOCKET_CONNECTION_H
+#define IL_CONNECTION_ABSTRACT_WEBSOCKET_CONNECTION_H
 
 #include <boost/asio.hpp>
 #include <boost/beast/core.hpp>
@@ -10,9 +10,9 @@
 #include "il_client.h"
 #include "websocket_interface.h"
 
-class RealWebSocketConnection : public WebSocketClientInterface {
+class AbstractWebSocketConnection : public WebSocketClientInterface {
    public:
-    RealWebSocketConnection(net::io_context& io_context,
+    AbstractWebSocketConnection(net::io_context& io_context,
                             std::weak_ptr<InformationLayerClient> client);
 
     void asyncResolve(const std::string& host, const std::string& port) override;
@@ -34,4 +34,4 @@ class RealWebSocketConnection : public WebSocketClientInterface {
     void fail(beast::error_code error_code, const char* operation);
 };
 
-#endif  // IL_CONNECTION_REAL_WEBSOCKET_CONNECTION_H
+#endif  // IL_CONNECTION_ABSTRACT_WEBSOCKET_CONNECTION_H

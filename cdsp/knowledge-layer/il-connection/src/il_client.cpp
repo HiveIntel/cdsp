@@ -7,7 +7,7 @@
 #include <stdexcept>
 #include <utility>
 
-#include "real_websocket_connection.h"
+#include "abstract_websocket_connection.h"
 #include "il_request/set_request.h"
 #include "il_request/subscribe_request.h"
 
@@ -62,7 +62,7 @@ void InformationLayerClient::initializeConnection() {
     });
 
     if (!connection_) {
-        connection_ = std::make_shared<RealWebSocketConnection>(io_context_, shared_from_this());
+        connection_ = std::make_shared<AbstractWebSocketConnection>(io_context_, shared_from_this());
     }
 }
 
