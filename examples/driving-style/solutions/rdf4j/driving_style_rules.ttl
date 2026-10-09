@@ -139,7 +139,7 @@ car:RuleHighSpeedObservation a sh:NodeShape ;
                     car:hasSpeed ?speed_value ;
                     car:hasObservationDatetime ?pt_speed_trimmed .
             } WHERE {
-                ?obs a car:CurrentObservation ;
+                ?obs a sosa:Observation ;
                      sosa:observedProperty car:speed ;
                      sosa:hasSimpleResult ?speed_value ;
                      sosa:phenomenonTime ?pt_speed .

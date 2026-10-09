@@ -37,9 +37,10 @@ Compose stack:
 - `launch/launch_information_layer.sh` first checks the configured WebSocket
   endpoint (`127.0.0.1:8080` by default). If it is reachable, it leaves that
   endpoint unchanged; otherwise it starts only the IL and IoTDB stack.
-- `launch/launch_knowledge_layer.sh` runs the IL check, exports a clean KL
-  source snapshot, stages `model/` and `solutions/` at the paths expected by
-  that snapshot, then builds and starts KL.
+- `launch/launch_knowledge_layer.sh` runs the IL check, then invokes the
+  driving-style client launcher in `tools/`, which builds and starts KL.
+  The runtime image disables test targets and retains CMake/ccache build
+  caches, so subsequent builds compile only changed C++ translation units.
 
 From the repository root:
 
@@ -47,6 +48,15 @@ From the repository root:
 examples/driving-style/launch/launch_knowledge_layer.sh
 ```
 
-The default vehicle instance is `VIN_1805`, matching the generator. Set
-`VEHICLE_OBJECT_ID`, `HOST_WEBSOCKET_SERVER`, or `PORT_WEBSOCKET_SERVER` to
-override the endpoint settings. `KL_SOURCE_REF` selects another local Git ref.
+The default model configuration is
+`/src/examples/driving-style/model/driving_style_reasoning.json` inside the
+Knowledge Layer container, and the default vehicle instance is `VIN_1805`,
+matching the generator. `MODEL_CONFIG` is required by the executable and is
+set to this default by the container. Set it to another path available inside
+the container when overriding it. Set `VEHICLE_OBJECT_ID`, `HOST_WEBSOCKET_SERVER`, or
+`PORT_WEBSOCKET_SERVER` to override the endpoint settings. `KL_SOURCE_REF`
+selects another local Git ref.
+
+Inference results are written to `Vehicle.AI.Reasoner.InferenceResults` as a
+serialized JSON value, the single output node defined by the Information Layer
+contract.

@@ -1,10 +1,15 @@
+# syntax=docker/dockerfile:1.7
 FROM ubuntu:24.04 AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
   g++ \
   ca-certificates \
+  ccache \
   git \
+  libserd-dev \
+  nlohmann-json3-dev \
+  pkg-config \
   wget \
   && rm -rf /var/lib/apt/lists/*
 
@@ -33,7 +38,15 @@ COPY cdsp/knowledge-layer /src/cdsp/knowledge-layer
 COPY examples/driving-style /src/examples/driving-style
 
 WORKDIR /src/cdsp/knowledge-layer
-RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-  && cmake --build build --target driving_style_client -j8
+RUN --mount=type=cache,id=driving-style-cmake-${TARGETARCH},target=/build-cache \
+    --mount=type=cache,id=driving-style-ccache-${TARGETARCH},target=/root/.cache/ccache \
+    cmake -S . -B /build-cache \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DKL_BUILD_TESTS=OFF \
+      -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+  && cmake --build /build-cache --target driving_style_client -j"$(nproc)" \
+  && install -D -m 0755 /build-cache/bin/driving_style_client /opt/driving-style/driving_style_client
 
-ENTRYPOINT ["/src/cdsp/knowledge-layer/build/bin/driving_style_client", "/src/examples/driving-style/model/driving_style_reasoning.json"]
+ENV MODEL_CONFIG=/src/examples/driving-style/model/driving_style_reasoning.json
+
+ENTRYPOINT ["/opt/driving-style/driving_style_client"]

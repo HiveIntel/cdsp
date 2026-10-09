@@ -6,4 +6,4 @@ repo_root="$(git -C "$launcher_dir" rev-parse --show-toplevel)"
 
 "$launcher_dir/launch_information_layer.sh"
 
-exec "$repo_root/tools/run-driving-style-client.sh"
+exec "$repo_root/examples/driving-style/tools/run-driving-style-client.sh"

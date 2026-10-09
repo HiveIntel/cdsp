@@ -50,6 +50,10 @@ that signal groups never share a timestamp:
   are contained in the same record and have the same timestamp.
 - Steering angle and speed are separate records with rate-dependent offsets.
 
+`scene01` uses 10 Hz steering and 5 Hz speed sampling. This retains the
+steering-angle extrema used by the aggressive-driving rule's three-second
+comparison window.
+
 The route is deliberately hard-coded to a short path in Berlin because this is
 a model-test simulator, not a general routing engine. Each run uses the current
 UTC time, rounded to a whole second, as the common start time for every scene.
