@@ -1,0 +1,49 @@
+@prefix cdsp: <http://covesa.org/cdsp_kl#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix vss: <https://covesa.org/vss/latest/model#> .
+
+cdsp:VehicleLongitudeShape a sh:NodeShape ;
+    vss:path "Vehicle.CurrentLocation.Longitude" ;
+    sh:targetClass sosa:Observation ;
+    sh:property [
+        sh:path sosa:hasFeatureOfInterest ;
+        sh:class vss:Vehicle_CurrentLocation ;
+    ] ;
+    sh:property [
+        sh:path sosa:observedProperty ;
+        sh:hasValue vss:longitude ;
+    ] ;
+    sh:property [
+        vss:value "value" ;
+        sh:path sosa:hasSimpleResult ;
+        sh:datatype xsd:double ;
+    ] ;
+    sh:property [
+        vss:value "timestamp" ;
+        sh:path sosa:resultTime ;
+        sh:datatype xsd:dateTime ;
+    ] .
+
+cdsp:VehicleLatitudeShape a sh:NodeShape ;
+    vss:path "Vehicle.CurrentLocation.Latitude" ;
+    sh:targetClass sosa:Observation ;
+    sh:property [
+        sh:path sosa:hasFeatureOfInterest ;
+        sh:hasValue vss:Vehicle_CurrentLocation ;
+    ] ;
+    sh:property [
+        sh:path sosa:observedProperty ;
+        sh:hasValue vss:latitude ;
+    ] ;
+    sh:property [
+        vss:value "value" ;
+        sh:path sosa:hasSimpleResult ;
+        sh:datatype xsd:double ;
+    ] ;
+    sh:property [
+        vss:value "timestamp" ;
+        sh:path sosa:resultTime ;
+        sh:datatype xsd:dateTime ;
+    ] .

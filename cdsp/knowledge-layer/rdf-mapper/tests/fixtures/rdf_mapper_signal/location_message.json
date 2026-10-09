@@ -1,0 +1,38 @@
+{
+    "jsonrpc": "2.0",
+    "id": "sub-location",
+    "result": {
+        "instance": "VIN_123",
+        "data": {
+            "CurrentLocation.Latitude": 60,
+            "CurrentLocation.Longitude": 10
+        },
+        "metadata": {
+            "CurrentLocation.Latitude": {
+                "timestamps": {
+                    "generated": {
+                        "seconds": 1776429129,
+                        "nanos": 853211000
+                    },
+                    "received": {
+                        "seconds": 1778148820,
+                        "nanos": 535000000
+                    }
+                }
+            },
+            "CurrentLocation.Longitude": {
+                "timestamps": {
+                    "generated": {
+                        "seconds": 1776429129,
+                        "nanos": 853211000
+                    },
+                    "received": {
+                        "seconds": 1778148820,
+                        "nanos": 535000000
+                    }
+                }
+            }
+        }
+    }
+}
+
