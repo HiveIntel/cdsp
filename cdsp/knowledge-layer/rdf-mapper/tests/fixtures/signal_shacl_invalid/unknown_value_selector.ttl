@@ -1,0 +1,24 @@
+@prefix cdsp: <http://covesa.org/cdsp_kl#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix vss: <https://covesa.org/vss/latest/model#> .
+@prefix vsssh: <https://covesa.org/vss/latest/shapes#> .
+
+cdsp:S a sh:NodeShape ;
+    vss:path "Vehicle.Speed" ;
+    sh:targetClass sosa:Observation ;
+    sh:property [
+        sh:path sosa:hasFeatureOfInterest ;
+        sh:node vsssh:Vehicle ;
+    ] ;
+    sh:property [
+        vss:value "valeu" ;
+        sh:path sosa:hasSimpleResult ;
+        sh:datatype xsd:float ;
+    ] ;
+    sh:property [
+        vss:value "timestamp" ;
+        sh:path sosa:resultTime ;
+        sh:datatype xsd:dateTime ;
+    ] .

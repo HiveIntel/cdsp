@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
+#include <ostream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -168,5 +169,47 @@ INSTANTIATE_TEST_SUITE_P(
         InvalidInstanceBaseIri{"Caret", "https://example.org/in^stances/"},
         InvalidInstanceBaseIri{"Backtick", "https://example.org/in`stances/"}),
     [](const ::testing::TestParamInfo<InvalidInstanceBaseIri>& info) { return info.param.name; });
+
+struct InvalidSignalShape {
+    const char* fixture;
+    const char* diagnostic;
+};
+
+void PrintTo(const InvalidSignalShape& shape, std::ostream* out) { *out << shape.fixture; }
+
+class RDFMapperSignalShapeValidationTest
+    : public RDFMapperConstructorTest,
+      public ::testing::WithParamInterface<InvalidSignalShape> {};
+
+// Malformed signal bindings must fail at construction, not when a message arrives.
+TEST_P(RDFMapperSignalShapeValidationTest, RejectsMalformedSignalBinding) {
+    const auto signal_shapes = fixture_directory_ / "signal_shacl_invalid" /
+                               (std::string{GetParam().fixture} + ".ttl");
+    ASSERT_TRUE(std::filesystem::is_regular_file(signal_shapes))
+        << "Missing invalid signal fixture: " << signal_shapes;
+    try {
+        const RDFMapper mapper{vehicle_shapes_file_, signal_shapes, kInstanceBaseIri};
+        FAIL() << "Expected construction to reject " << signal_shapes;
+    } catch (const std::runtime_error& error) {
+        EXPECT_NE(std::string{error.what()}.find(GetParam().diagnostic), std::string::npos)
+            << error.what();
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    SignalBinding, RDFMapperSignalShapeValidationTest,
+    ::testing::Values(
+        InvalidSignalShape{"constraint_only_property", "exactly one value binding"},
+        InvalidSignalShape{"multiple_bindings", "exactly one value binding"},
+        InvalidSignalShape{"node_binding_with_datatype", "cannot have sh:datatype"},
+        InvalidSignalShape{"blank_node_constant", "Blank-node constants"},
+        InvalidSignalShape{"constant_datatype_conflict", "conflicts with sh:datatype"},
+        InvalidSignalShape{"dynamic_without_datatype", "requires sh:datatype"},
+        InvalidSignalShape{"unsupported_value_datatype", "Unsupported signal value datatype"},
+        InvalidSignalShape{"unknown_value_selector", "Unsupported vss:value selector"},
+        InvalidSignalShape{"timestamp_not_datetime", "requires xsd:dateTime"}),
+    [](const ::testing::TestParamInfo<InvalidSignalShape>& info) {
+        return std::string{info.param.fixture};
+    });
 
 }  // namespace

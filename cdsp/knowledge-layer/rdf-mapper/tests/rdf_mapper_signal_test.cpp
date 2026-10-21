@@ -70,7 +70,7 @@ RDFNode instance(const std::string& part = "", const std::string& encoded_id = "
 
 RDFNode observation(const std::string& signal_path, const std::string& time = kGeneratedText,
                     const std::string& encoded_id = "VIN_test") {
-    return RDFNode::iri(instance("", encoded_id).value + "/observations/" + signal_path + "/" +
+    return RDFNode::iri(instance("", encoded_id).value + "/observation/" + signal_path + "/" +
                         time);
 }
 
@@ -597,5 +597,108 @@ INSTANTIATE_TEST_SUITE_P(
         GeneratedTimeCase{"MinimumClockValue", TimePoint::min(), "1677-09-21T00:12:43.145224192Z"},
         GeneratedTimeCase{"MaximumClockValue", TimePoint::max(), "2262-04-11T23:47:16.854775807Z"}),
     [](const ::testing::TestParamInfo<GeneratedTimeCase>& info) { return info.param.name; });
+
+// The IRI segment follows the signal's target class, not a fixed SOSA vocabulary word.
+TEST_F(RDFMapperSignalTest, SignalIriSegmentFollowsTargetClassLocalName) {
+    const RDFMapper mapper{vehicle_shapes_,
+                           fixtures_ / "signal_shacl_custom_class" / "speed_signal.ttl", kBase};
+    const auto triples = mapper.signalToTriples(speedMessage(), "VIN_test");
+    const RDFNode subject = RDFNode::iri(instance().value + "/signal/Speed/" + kGeneratedText);
+    const RDFGraph graph(triples);
+    EXPECT_EQ(graph.object(subject, kRdfType), RDFNode::iri("https://example.org/ontology#Signal"));
+    EXPECT_EQ(graph.object(subject, "https://example.org/ontology#value"),
+              RDFNode::literal("42.5", kXsd + "float"));
+}
+
+struct IntegerSignalCase {
+    const char* name;
+    const char* path;
+    Scalar value;
+    bool accepted;
+};
+
+void PrintTo(const IntegerSignalCase& value, std::ostream* out) { *out << value.name; }
+
+class RDFIntegerDatatypeTest : public RDFMapperSignalTest,
+                               public ::testing::WithParamInterface<IntegerSignalCase> {
+   protected:
+    RDFMapper integerMapper() const {
+        return RDFMapper{vehicle_shapes_, fixtures_ / "signal_shacl_datatypes" / "integer_obs.ttl",
+                         kBase};
+    }
+};
+
+// xsd:integer-derived datatypes accept in-range int64 values and keep their declared type.
+TEST_P(RDFIntegerDatatypeTest, EnforcesDerivedIntegerRange) {
+    const auto mapper = integerMapper();
+    const auto& param = GetParam();
+    il_message::DataMessageDTO message;
+    message.data.push_back({param.path, param.value});
+    message.metadata = std::vector<il_data_point::MetadataPointDTO>{metadata(param.path)};
+    if (!param.accepted) {
+        EXPECT_THROW(mapper.signalToTriples(message, "VIN_test"), std::invalid_argument);
+        return;
+    }
+
+    std::string relative_path = std::string{param.path}.substr(std::string{"Vehicle."}.size());
+    std::replace(relative_path.begin(), relative_path.end(), '.', '/');
+    const RDFGraph graph(mapper.signalToTriples(message, "VIN_test"));
+    const auto value = graph.object(observation(relative_path), kSosa + "hasSimpleResult");
+    ASSERT_TRUE(value.has_value());
+    EXPECT_EQ(value->value, std::to_string(std::get<std::int64_t>(param.value)));
+}
+
+TEST_F(RDFMapperSignalTest, UnsignedByteSignalUsesDeclaredDatatypeAndFeature) {
+    const RDFMapper mapper{vehicle_shapes_,
+                           fixtures_ / "signal_shacl_datatypes" / "integer_obs.ttl", kBase};
+    const std::string path = "Vehicle.Powertrain.TractionBattery.StateOfCharge.Current";
+    il_message::DataMessageDTO message;
+    message.data.push_back({path, std::int64_t{87}});
+    message.metadata = std::vector<il_data_point::MetadataPointDTO>{metadata(path)};
+    const RDFGraph graph(mapper.signalToTriples(message, "VIN_test"));
+    const auto subject = observation("Powertrain/TractionBattery/StateOfCharge/Current");
+    EXPECT_EQ(graph.object(subject, kSosa + "hasSimpleResult"),
+              RDFNode::literal("87", kXsd + "unsignedByte"));
+    EXPECT_EQ(graph.object(subject, kSosa + "hasFeatureOfInterest"),
+              instance("Powertrain/TractionBattery/StateOfCharge"));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    DerivedInteger, RDFIntegerDatatypeTest,
+    ::testing::Values(
+        IntegerSignalCase{"UnsignedByteMin",
+                          "Vehicle.Powertrain.TractionBattery.StateOfCharge.Current",
+                          Scalar{std::int64_t{0}}, true},
+        IntegerSignalCase{"UnsignedByteMax",
+                          "Vehicle.Powertrain.TractionBattery.StateOfCharge.Current",
+                          Scalar{std::int64_t{255}}, true},
+        IntegerSignalCase{"UnsignedByteOverflow",
+                          "Vehicle.Powertrain.TractionBattery.StateOfCharge.Current",
+                          Scalar{std::int64_t{256}}, false},
+        IntegerSignalCase{"UnsignedByteNegative",
+                          "Vehicle.Powertrain.TractionBattery.StateOfCharge.Current",
+                          Scalar{std::int64_t{-1}}, false},
+        IntegerSignalCase{"UnsignedByteRejectsDouble",
+                          "Vehicle.Powertrain.TractionBattery.StateOfCharge.Current",
+                          Scalar{87.0}, false},
+        IntegerSignalCase{"IntMin", "Vehicle.Test.Int",
+                          Scalar{std::int64_t{std::numeric_limits<std::int32_t>::min()}}, true},
+        IntegerSignalCase{"IntOverflow", "Vehicle.Test.Int",
+                          Scalar{std::int64_t{std::numeric_limits<std::int32_t>::max()} + 1},
+                          false},
+        IntegerSignalCase{"ShortMax", "Vehicle.Test.Short",
+                          Scalar{std::int64_t{std::numeric_limits<std::int16_t>::max()}}, true},
+        IntegerSignalCase{"ShortUnderflow", "Vehicle.Test.Short",
+                          Scalar{std::int64_t{std::numeric_limits<std::int16_t>::min()} - 1},
+                          false},
+        IntegerSignalCase{"NegativeIntegerMax", "Vehicle.Test.NegativeInteger",
+                          Scalar{std::int64_t{-1}}, true},
+        IntegerSignalCase{"NegativeIntegerRejectsZero", "Vehicle.Test.NegativeInteger",
+                          Scalar{std::int64_t{0}}, false},
+        IntegerSignalCase{"UnsignedLongMax", "Vehicle.Test.UnsignedLong",
+                          Scalar{std::numeric_limits<std::int64_t>::max()}, true},
+        IntegerSignalCase{"UnsignedLongNegative", "Vehicle.Test.UnsignedLong",
+                          Scalar{std::int64_t{-1}}, false}),
+    [](const ::testing::TestParamInfo<IntegerSignalCase>& info) { return info.param.name; });
 
 }  // namespace

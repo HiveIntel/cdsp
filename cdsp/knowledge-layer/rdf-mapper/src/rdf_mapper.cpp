@@ -3,12 +3,14 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <ctime>
 #include <fstream>
 #include <initializer_list>
 #include <iomanip>
 #include <limits>
 #include <locale>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_set>
@@ -42,7 +44,7 @@ std::string_view classLocalName(const NodeShape& shape) {
     const auto separator = iri.find_last_of("#/");
     const auto local_name = separator == std::string_view::npos ? iri : iri.substr(separator + 1);
     if (local_name.empty()) {
-        throw std::runtime_error("Vehicle target class has no local name: " + std::string(iri));
+        throw std::runtime_error("Target class has no local name: " + std::string(iri));
     }
     return local_name;
 }
@@ -87,6 +89,35 @@ std::string generatedTimeText(std::chrono::system_clock::time_point time) {
     return text.str();
 }
 
+/// Value range of xsd:integer and its derived types; the DTO carries at most int64.
+std::optional<std::pair<std::int64_t, std::int64_t>> integerRange(std::string_view local_type) {
+    constexpr auto min = std::numeric_limits<std::int64_t>::min();
+    constexpr auto max = std::numeric_limits<std::int64_t>::max();
+    if (local_type == "integer" || local_type == "long") return {{min, max}};
+    if (local_type == "int") return {{INT32_MIN, INT32_MAX}};
+    if (local_type == "short") return {{INT16_MIN, INT16_MAX}};
+    if (local_type == "byte") return {{INT8_MIN, INT8_MAX}};
+    if (local_type == "unsignedLong" || local_type == "nonNegativeInteger") return {{0, max}};
+    if (local_type == "unsignedInt") return {{0, UINT32_MAX}};
+    if (local_type == "unsignedShort") return {{0, UINT16_MAX}};
+    if (local_type == "unsignedByte") return {{0, UINT8_MAX}};
+    if (local_type == "positiveInteger") return {{1, max}};
+    if (local_type == "nonPositiveInteger") return {{min, 0}};
+    if (local_type == "negativeInteger") return {{min, -1}};
+    return std::nullopt;
+}
+
+/// Datatypes signalValueLiteral can produce; checked once when shapes are indexed.
+bool isSupportedValueDatatype(std::string_view type) {
+    constexpr std::string_view xsd = "http://www.w3.org/2001/XMLSchema#";
+    if (type.compare(0, xsd.size(), xsd) != 0) {
+        return false;
+    }
+    const auto local_type = type.substr(xsd.size());
+    return local_type == "string" || local_type == "boolean" || local_type == "float" ||
+           local_type == "double" || integerRange(local_type).has_value();
+}
+
 /// Convert DTO scalars to the declared XSD value space; do not relabel arbitrary text.
 RDFNode signalValueLiteral(const il_data_point::DataPointDTO& point, const RDFNode& datatype) {
     constexpr std::string_view xsd = "http://www.w3.org/2001/XMLSchema#";
@@ -103,8 +134,12 @@ RDFNode signalValueLiteral(const il_data_point::DataPointDTO& point, const RDFNo
         if (const auto* value = std::get_if<bool>(&point.value)) {
             return RDFNode::literal(*value ? "true" : "false", datatype.value);
         }
-    } else if (local_type == "integer") {
+    } else if (const auto range = integerRange(local_type)) {
         if (const auto* value = std::get_if<std::int64_t>(&point.value)) {
+            if (*value < range->first || *value > range->second) {
+                throw std::invalid_argument("Signal value exceeds xsd:" + std::string(local_type) +
+                                            " range: " + point.path);
+            }
             return RDFNode::literal(std::to_string(*value), datatype.value);
         }
     } else if (local_type == "float" || local_type == "double") {
@@ -243,6 +278,8 @@ RDFMapper::RDFMapper(const std::filesystem::path& vehicle_shapes_file,
 void RDFMapper::buildShapeIndexes() {
     std::vector<NodeShapePtr> vehicle_shapes;
     std::unordered_set<std::string> instance_paths;
+    // Encoded root segments that signal instances occupy; vehicle parts must avoid them.
+    std::unordered_set<std::string> signal_class_segments;
     for (const NodeShapePtr& shape : node_shapes_) {
         if (!shape->vss_path.has_value()) {
             vehicle_shapes.push_back(shape);
@@ -259,7 +296,20 @@ void RDFMapper::buildShapeIndexes() {
         if (path.compare(0, 8, "Vehicle.") == 0) {
             path.remove_prefix(8);
         }
-        std::string relative_path = "observations";
+        // The signal's own target class names its root segment (sosa:Observation ->
+        // "observation"), so instance IRIs follow the ontology rather than a fixed word.
+        std::string class_segment(classLocalName(*shape));
+        for (char& character : class_segment) {
+            if (character >= 'A' && character <= 'Z') {
+                character = static_cast<char>(character - 'A' + 'a');
+            }
+        }
+        if (class_segment == "." || class_segment == "..") {
+            throw std::runtime_error("Signal target class has a reserved IRI component: " +
+                                     shape->sh_target_class.value);
+        }
+        std::string relative_path = encodeIriSegment(class_segment);
+        signal_class_segments.insert(relative_path);
         std::size_t start = 0;
         do {
             const auto dot = path.find('.', start);
@@ -276,7 +326,7 @@ void RDFMapper::buildShapeIndexes() {
         } while (start <= path.size());
 
         if (!instance_paths.insert(relative_path).second) {
-            throw std::runtime_error("Signal keys produce the same observation IRI path: " + key);
+            throw std::runtime_error("Signal keys produce the same signal IRI path: " + key);
         }
         instance_paths_by_shape_.emplace(shape.get(), std::move(relative_path));
     }
@@ -332,7 +382,7 @@ void RDFMapper::buildShapeIndexes() {
             }
             const auto segment = child_class.substr(class_prefix.size());
             if (segment.empty() || segment == "." || segment == ".." ||
-                (parent_path.empty() && segment == "observations")) {
+                (parent_path.empty() && signal_class_segments.count(encodeIriSegment(segment)))) {
                 throw std::runtime_error("Vehicle part has an empty or reserved IRI component: " +
                                          child->sh_target_class.value);
             }
@@ -351,14 +401,63 @@ void RDFMapper::buildShapeIndexes() {
             "Vehicle topology contains a cycle or a part unreachable from its root");
     }
 
+    // Validate every signal binding once here so mapping never meets a malformed shape.
     for (const auto& entry : signal_shapes_by_path_) {
         for (const PropertyShape& property : entry.second->sh_properties) {
             const NodeShapePtr target = property.sh_node.lock();
-            if (target &&
-                (target->vss_path.has_value() ||
-                 instance_paths_by_shape_.find(target.get()) == instance_paths_by_shape_.end())) {
-                throw std::runtime_error("Signal sh:node must bind a reachable vehicle shape: " +
-                                         entry.first);
+            const unsigned binding_count =
+                static_cast<unsigned>(static_cast<bool>(target)) +
+                static_cast<unsigned>(property.sh_has_value.has_value()) +
+                static_cast<unsigned>(property.vss_value.has_value());
+            if (binding_count != 1) {
+                throw std::runtime_error("Signal property must have exactly one value binding: " +
+                                         property.sh_path.value);
+            }
+
+            if (target) {
+                if (target->vss_path.has_value() ||
+                    instance_paths_by_shape_.find(target.get()) == instance_paths_by_shape_.end()) {
+                    throw std::runtime_error(
+                        "Signal sh:node must bind a reachable vehicle shape: " + entry.first);
+                }
+                if (property.sh_datatype.has_value()) {
+                    throw std::runtime_error("Vehicle instance binding cannot have sh:datatype: " +
+                                             property.sh_path.value);
+                }
+            } else if (property.sh_has_value.has_value()) {
+                const RDFNode& constant = *property.sh_has_value;
+                if (constant.type == RDFNodeType::BlankNode) {
+                    throw std::runtime_error(
+                        "Blank-node constants are not supported by signal mapping: " +
+                        property.sh_path.value);
+                }
+                if (property.sh_datatype.has_value() &&
+                    (constant.type != RDFNodeType::Literal ||
+                     constant.datatype.value_or("http://www.w3.org/2001/XMLSchema#string") !=
+                         property.sh_datatype->value)) {
+                    throw std::runtime_error("Signal constant conflicts with sh:datatype: " +
+                                             property.sh_path.value);
+                }
+            } else {
+                if (!property.sh_datatype.has_value()) {
+                    throw std::runtime_error("Dynamic signal property requires sh:datatype: " +
+                                             property.sh_path.value);
+                }
+                if (*property.vss_value == "value") {
+                    if (!isSupportedValueDatatype(property.sh_datatype->value)) {
+                        throw std::runtime_error("Unsupported signal value datatype: " +
+                                                 property.sh_datatype->value);
+                    }
+                } else if (*property.vss_value == "timestamp") {
+                    if (property.sh_datatype->value !=
+                        "http://www.w3.org/2001/XMLSchema#dateTime") {
+                        throw std::runtime_error("Signal timestamp requires xsd:dateTime: " +
+                                                 property.sh_path.value);
+                    }
+                } else {
+                    throw std::runtime_error("Unsupported vss:value selector: " +
+                                             *property.vss_value);
+                }
             }
         }
     }
@@ -378,18 +477,14 @@ RDFNode RDFMapper::vehicleInstanceIri(std::string_view vehicle_id, const NodeSha
     return RDFNode::iri(iri);
 }
 
-RDFNode RDFMapper::observationInstanceIri(std::string_view vehicle_id, const NodeShape& shape,
-                                          const il_data_point::TimestampsDTO& timestamps) const {
+RDFNode RDFMapper::signalInstanceIri(const RDFNode& vehicle_root, const NodeShape& shape,
+                                     std::string_view generated_time) const {
     const auto path = instance_paths_by_shape_.find(&shape);
     if (!shape.vss_path.has_value() || path == instance_paths_by_shape_.end()) {
-        throw std::invalid_argument("Observation IRI requires an indexed signal shape");
+        throw std::invalid_argument("Signal IRI requires an indexed signal shape");
     }
-    if (!timestamps.generated.has_value()) {
-        throw std::invalid_argument("Observation IRI requires a generated timestamp");
-    }
-    const RDFNode vehicle = vehicleInstanceIri(vehicle_id, *vehicle_root_shape_);
-    return RDFNode::iri(vehicle.value + '/' + path->second + '/' +
-                        generatedTimeText(*timestamps.generated));
+    return RDFNode::iri(vehicle_root.value + '/' + path->second + '/' +
+                        std::string(generated_time));
 }
 
 void RDFMapper::appendVehicleBranchTriples(
@@ -432,7 +527,7 @@ std::vector<RDFTriple> RDFMapper::vehicleToTriples(const std::string& vehicle_id
 
 std::vector<RDFTriple> RDFMapper::signalToTriples(const il_message::DataMessageDTO& message,
                                                   const std::string& vehicle_id) const {
-    (void) vehicleInstanceIri(vehicle_id, *vehicle_root_shape_);
+    const RDFNode vehicle_root = vehicleInstanceIri(vehicle_id, *vehicle_root_shape_);
     // Metadata ordering is independent of data ordering. Duplicate keys are ambiguous,
     // even when their current values happen to match; no event-merge policy is implied.
     std::unordered_map<std::string, const il_data_point::TimestampsDTO*> timestamps_by_path;
@@ -465,63 +560,24 @@ std::vector<RDFTriple> RDFMapper::signalToTriples(const il_message::DataMessageD
         }
 
         const NodeShape& shape = *indexed_shape->second;
-        const RDFNode subject = observationInstanceIri(vehicle_id, shape, *timestamps->second);
+        const std::string generated_time = generatedTimeText(*timestamps->second->generated);
+        const RDFNode subject = signalInstanceIri(vehicle_root, shape, generated_time);
         std::vector<RDFTriple> observation_triples;
         observation_triples.reserve(shape.sh_properties.size() + 1);
         observation_triples.push_back(
             {subject, RDFNode::iri(std::string(rdf::type)), shape.sh_target_class});
         for (const PropertyShape& property : shape.sh_properties) {
-            const NodeShapePtr target = property.sh_node.lock();
-            const unsigned binding_count =
-                static_cast<unsigned>(static_cast<bool>(target)) +
-                static_cast<unsigned>(property.sh_has_value.has_value()) +
-                static_cast<unsigned>(property.vss_value.has_value());
-            if (binding_count != 1) {
-                throw std::runtime_error("Signal property must have exactly one value binding: " +
-                                         property.sh_path.value);
-            }
-
+            // Bindings were validated by buildShapeIndexes; exactly one is present.
             RDFNode object;
-            if (target) {
-                if (property.sh_datatype.has_value()) {
-                    throw std::runtime_error("Vehicle instance binding cannot have sh:datatype: " +
-                                             property.sh_path.value);
-                }
+            if (const NodeShapePtr target = property.sh_node.lock()) {
                 object = vehicleInstanceIri(vehicle_id, *target);
                 appendVehicleBranchTriples(vehicle_id, *target, triples, emitted_entities);
             } else if (property.sh_has_value.has_value()) {
                 object = *property.sh_has_value;
-                if (object.type == RDFNodeType::BlankNode) {
-                    throw std::runtime_error(
-                        "Blank-node constants are not supported by signal mapping: " +
-                        property.sh_path.value);
-                }
-                if (property.sh_datatype.has_value() &&
-                    (object.type != RDFNodeType::Literal ||
-                     object.datatype.value_or("http://www.w3.org/2001/XMLSchema#string") !=
-                         property.sh_datatype->value)) {
-                    throw std::runtime_error("Signal constant conflicts with sh:datatype: " +
-                                             property.sh_path.value);
-                }
+            } else if (*property.vss_value == "value") {
+                object = signalValueLiteral(point, *property.sh_datatype);
             } else {
-                if (!property.sh_datatype.has_value()) {
-                    throw std::runtime_error("Dynamic signal property requires sh:datatype: " +
-                                             property.sh_path.value);
-                }
-                if (*property.vss_value == "value") {
-                    object = signalValueLiteral(point, *property.sh_datatype);
-                } else if (*property.vss_value == "timestamp") {
-                    if (property.sh_datatype->value !=
-                        "http://www.w3.org/2001/XMLSchema#dateTime") {
-                        throw std::runtime_error("Signal timestamp requires xsd:dateTime: " +
-                                                 property.sh_path.value);
-                    }
-                    object = RDFNode::literal(generatedTimeText(*timestamps->second->generated),
-                                              property.sh_datatype->value);
-                } else {
-                    throw std::runtime_error("Unsupported vss:value selector: " +
-                                             *property.vss_value);
-                }
+                object = RDFNode::literal(generated_time, property.sh_datatype->value);
             }
 
             const RDFTriple triple{subject, property.sh_path, std::move(object)};

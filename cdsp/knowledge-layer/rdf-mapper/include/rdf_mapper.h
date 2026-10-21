@@ -43,7 +43,8 @@ class RDFMapper {
      *        query, fragment or literal dot segments. IP-literal hosts are not
      *        supported. This is independent of the files' vocabulary namespaces.
      * @throws std::invalid_argument If the instance namespace is unsuitable.
-     * @throws std::runtime_error If an input cannot be read/parsed, or its shape
+     * @throws std::runtime_error If an input cannot be read/parsed, a signal property
+     *         binding/datatype is unsupported or ambiguous, or its shape
      *         topology, signal keys or generated instance paths are ambiguous.
      */
     RDFMapper(const std::filesystem::path& vehicle_shapes_file,
@@ -73,8 +74,8 @@ class RDFMapper {
      * @param vehicle_id Explicit vehicle identity, independent of message.instance.
      * @throws std::invalid_argument If the ID, signal key, value or generated metadata
      *         is invalid; duplicate data/metadata paths are ambiguous and rejected.
-     * @throws std::runtime_error If a property binding/datatype is unsupported or ambiguous,
-     *         or a timestamp cannot be formatted as UTC.
+     * @throws std::runtime_error If a timestamp cannot be formatted as UTC; shape bindings
+     *         and datatypes are validated by the constructor.
      */
     std::vector<RDFTriple> signalToTriples(const il_message::DataMessageDTO& message,
                                            const std::string& vehicle_id) const;
@@ -110,17 +111,17 @@ class RDFMapper {
     RDFNode vehicleInstanceIri(std::string_view vehicle_id, const NodeShape& shape) const;
 
     /**
-     * @brief Identify an observation by vehicle, signal path and generated time.
+     * @brief Identify a signal instance by vehicle, signal path and generated time.
      *
      * Remove one leading "Vehicle." from the signal key and encode each dot-separated
-     * component under /observations/. Keep lookup keys unchanged and case-sensitive.
-     * Generated time is required and formatted in UTC with nine fractional digits;
-     * identical inputs intentionally yield the same IRI, including on replay.
-     * @throws std::invalid_argument If the ID/shape is invalid or generated time is absent.
-     * @throws std::runtime_error If generated time cannot be formatted as UTC.
+     * component under the lowercased local name of the shape's target class (for
+     * example /observation/ for sosa:Observation). Keep lookup keys unchanged and case-sensitive.
+     * The caller supplies the root vehicle IRI and the UTC generated-time text, so both
+     * are computed once and reused; identical inputs yield the same IRI, including on replay.
+     * @throws std::invalid_argument If the shape is not an indexed signal shape.
      */
-    RDFNode observationInstanceIri(std::string_view vehicle_id, const NodeShape& shape,
-                                   const il_data_point::TimestampsDTO& timestamps) const;
+    RDFNode signalInstanceIri(const RDFNode& vehicle_root, const NodeShape& shape,
+                              std::string_view generated_time) const;
 
     /// Append the missing root-to-entity branch, retaining forward containment predicates.
     /// emitted_entities belongs to one mapping call, not persistent mapper state.
@@ -143,7 +144,7 @@ class RDFMapper {
     /// Child -> parent and forward RDF predicate, for later part-to-root traversal.
     std::unordered_map<const NodeShape*, VehicleParent> vehicle_parents_;
 
-    /// Encoded relative paths; empty for root, leading "observations/" reserved for signals.
+    /// Encoded relative paths; empty for root, signals start with their lowercased class name.
     /// Pointer keys are identity lookups only and never contribute to generated IRIs.
     std::unordered_map<const NodeShape*, std::string> instance_paths_by_shape_;
 };
