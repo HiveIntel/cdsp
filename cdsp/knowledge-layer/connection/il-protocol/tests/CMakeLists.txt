@@ -33,24 +33,19 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
         FetchContent_MakeAvailable(googletest)
     endif()
 
-    find_package(Boost 1.74 REQUIRED COMPONENTS system)
     enable_testing()
     add_subdirectory(.. "${CMAKE_CURRENT_BINARY_DIR}/il-protocol")
-    add_subdirectory(../../ws-connection
-                     "${CMAKE_CURRENT_BINARY_DIR}/ws-connection")
 endif()
 
 find_package(Threads REQUIRED)
 
 add_executable(il-protocol-tests
     il_protocol_test.cpp
-    il_protocol_websocket_test.cpp
 )
 
 target_link_libraries(il-protocol-tests
     PRIVATE
         il-protocol
-        ws-connection
         GTest::gtest_main
         Threads::Threads
 )

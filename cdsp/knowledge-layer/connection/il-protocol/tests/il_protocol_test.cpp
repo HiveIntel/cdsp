@@ -153,6 +153,46 @@ TEST(ILMessageParserTest, ParsesSuccessAndErrorResponses) {
     EXPECT_EQ(error.error.data->at("reason"), "path");
 }
 
+TEST(ILMessageParserTest, ParsesErrorWithNullIdAsEmptyId) {
+    const auto parsed = il_message::ILMessageParser::parseWire(
+        R"({"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error"}})");
+    ASSERT_TRUE(std::holds_alternative<il_message::ErrorMessageDTO>(parsed));
+    const auto& error = std::get<il_message::ErrorMessageDTO>(parsed);
+    EXPECT_EQ(error.id, "");
+    EXPECT_EQ(error.error.code, -32700);
+
+    // Only an error may be anonymous; a result still needs its request id.
+    EXPECT_THROW(il_message::ILMessageParser::parseWire(
+                     R"({"jsonrpc":"2.0","id":null,"result":{}})"),
+                 std::invalid_argument);
+    EXPECT_THROW(il_message::ILMessageParser::parseWire(
+                     R"({"jsonrpc":"2.0","error":{"code":-32700,"message":"Parse error"}})"),
+                 std::invalid_argument);
+}
+
+TEST(ILMessageParserTest, CollectsMetadataBelowATimestampedNode) {
+    const auto parsed = il_message::ILMessageParser::parseWire(
+        R"({"jsonrpc":"2.0","id":"get-1","result":{"instance":"VIN_1805","data":{"Vehicle":{"Speed":42.5}},"metadata":{"Vehicle":{"timestamps":{"received":{"seconds":1,"nanos":0}},"Speed":{"timestamps":{"generated":{"seconds":2,"nanos":0}}}}}}})");
+    const auto& message = std::get<il_message::DataMessageDTO>(parsed);
+    ASSERT_TRUE(message.metadata.has_value());
+    ASSERT_EQ(message.metadata->size(), 2U);
+    EXPECT_EQ(message.metadata->at(0).path, "Vehicle");
+    EXPECT_TRUE(message.metadata->at(0).timestamps.received.has_value());
+    EXPECT_EQ(message.metadata->at(1).path, "Vehicle.Speed");
+    ASSERT_TRUE(message.metadata->at(1).timestamps.generated.has_value());
+    EXPECT_EQ(message.metadata->at(1).timestamps.generated->time_since_epoch(),
+              std::chrono::seconds{2});
+}
+
+TEST(ILMessageParserTest, RejectsDuplicatePathsAfterFlattening) {
+    EXPECT_THROW(il_message::ILMessageParser::parseWire(
+                     R"({"jsonrpc":"2.0","id":"x","result":{"instance":"VIN","data":{"Vehicle.Speed":1,"Vehicle":{"Speed":2}}}})"),
+                 std::invalid_argument);
+    EXPECT_THROW(il_message::ILMessageParser::parseWire(
+                     R"({"jsonrpc":"2.0","id":"x","result":{"instance":"VIN","data":{"Vehicle.Speed":1},"metadata":{"Vehicle.Speed":{"timestamps":{}},"Vehicle":{"Speed":{"timestamps":{}}}}}})"),
+                 std::invalid_argument);
+}
+
 TEST(ILMessageParserTest, RejectsMalformedEnvelopes) {
     EXPECT_THROW(il_message::ILMessageParser::parse(json::array()), std::invalid_argument);
     EXPECT_THROW(il_message::ILMessageParser::parse(

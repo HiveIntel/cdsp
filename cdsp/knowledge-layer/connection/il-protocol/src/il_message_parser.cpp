@@ -10,6 +10,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -31,11 +32,26 @@ const json& requireObjectMember(const json& object, const char* name) {
 }
 
 /// Copies a string correlation id; this parser neither tracks requests nor matches replies.
-std::string parseId(const json& message) {
+/// JSON-RPC answers a request it could not identify with a null id; only errors may do so,
+/// and that id is returned as an empty string.
+std::string parseId(const json& message, const bool allow_null) {
+    if (allow_null && message.contains("id") && message.at("id").is_null()) {
+        return {};
+    }
     if (!message.contains("id") || !message.at("id").is_string()) {
-        throw std::invalid_argument("IL response requires a string id");
+        throw std::invalid_argument(allow_null ? "IL error response requires a string or null id"
+                                               : "IL response requires a string id");
     }
     return message.at("id").get<std::string>();
+}
+
+/// Rejects a second point for a path, e.g. from both a dotted key and a nested object.
+void requireUniquePath(std::unordered_set<std::string>& paths, const std::string& path,
+                       const char* section) {
+    if (!paths.insert(path).second) {
+        throw std::invalid_argument(std::string{"IL "} + section + " contains duplicate path '" +
+                                    path + "'");
+    }
 }
 
 /// Joins object keys with dots; an empty key denotes the current path, not a new segment.
@@ -94,14 +110,15 @@ DataPointDTO parseDataPoint(const std::string& path, const json& value) {
 /// Recursively flattens nested objects; already-dotted keys are retained as supplied.
 /// Empty objects contribute no points; output order is JSON iteration order, not wire order.
 void appendDataPoints(const json& value, const std::string& path,
-                      std::vector<DataPointDTO>& points) {
+                      std::vector<DataPointDTO>& points, std::unordered_set<std::string>& paths) {
     if (!value.is_object()) {
+        requireUniquePath(paths, path, "data");
         points.push_back(parseDataPoint(path, value));
         return;
     }
 
     for (auto member = value.cbegin(); member != value.cend(); ++member) {
-        appendDataPoints(member.value(), childPath(path, member.key()), points);
+        appendDataPoints(member.value(), childPath(path, member.key()), points, paths);
     }
 }
 
@@ -154,20 +171,23 @@ TimestampsDTO parseTimestamps(const json& value, const std::string& path) {
 }
 
 /// Collects timestamp-bearing metadata objects using the same dot-path join as data.
-/// Non-object leaves are ignored; a timestamps member ends recursion at that node.
+/// Non-object leaves are ignored. A node's own timestamps do not hide its children's.
 void appendMetadataPoints(const json& value, const std::string& path,
-                          std::vector<MetadataPointDTO>& points) {
+                          std::vector<MetadataPointDTO>& points,
+                          std::unordered_set<std::string>& paths) {
     if (!value.is_object()) {
         return;
     }
 
     if (value.contains("timestamps")) {
+        requireUniquePath(paths, path, "metadata");
         points.push_back({path, parseTimestamps(value.at("timestamps"), path)});
-        return;
     }
 
     for (auto member = value.cbegin(); member != value.cend(); ++member) {
-        appendMetadataPoints(member.value(), childPath(path, member.key()), points);
+        if (member.key() != "timestamps") {
+            appendMetadataPoints(member.value(), childPath(path, member.key()), points, paths);
+        }
     }
 }
 
@@ -208,7 +228,8 @@ DataMessageDTO parseData(const json& result, std::string id) {
     }
 
     std::vector<DataPointDTO> data_points;
-    appendDataPoints(result.at("data"), "", data_points);
+    std::unordered_set<std::string> data_paths;
+    appendDataPoints(result.at("data"), "", data_points, data_paths);
 
     DataMessageDTO data_message{ILMessageDTO{std::move(id), "2.0"},
                                 result.at("instance").get<std::string>(), std::move(data_points),
@@ -219,7 +240,8 @@ DataMessageDTO parseData(const json& result, std::string id) {
             throw std::invalid_argument("IL data response metadata must be an object or null");
         }
         std::vector<MetadataPointDTO> metadata_points;
-        appendMetadataPoints(result.at("metadata"), "", metadata_points);
+        std::unordered_set<std::string> metadata_paths;
+        appendMetadataPoints(result.at("metadata"), "", metadata_points, metadata_paths);
         data_message.metadata = std::move(metadata_points);
     }
     return data_message;
@@ -237,14 +259,14 @@ InboundMessageDTO ILMessageParser::parse(const json& message) {
     }
 
     // Classify the envelope before decoding payloads; a reply cannot be both result and error.
-    std::string id = parseId(message);
     if (message.contains("error")) {
         if (message.contains("result")) {
             throw std::invalid_argument("IL response cannot contain both result and error");
         }
-        return parseError(message, std::move(id));
+        return parseError(message, parseId(message, true));
     }
 
+    std::string id = parseId(message, false);
     const json& result = requireObjectMember(message, "result");
     if (result.contains("data")) {
         return parseData(result, std::move(id));

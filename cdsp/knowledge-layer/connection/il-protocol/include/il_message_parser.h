@@ -19,7 +19,8 @@ namespace il_message {
  * Supported envelopes are a data response/update containing `result.data`, a
  * successful acknowledgement containing an empty `result` object, and a
  * JSON-RPC `error` response. Every envelope must use JSON-RPC 2.0 and a string
- * request identifier.
+ * request identifier; only an error may carry a null id, returned as an empty id.
+ * Duplicate data or metadata paths after flattening are rejected.
  *
  * The parser is stateless and retains no references to its input. Independent
  * calls may execute concurrently while callers keep their JSON inputs unchanged.

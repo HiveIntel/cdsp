@@ -23,7 +23,7 @@ namespace il_message {
  */
 struct ILMessageDTO {
     /// Correlation identifier copied from the response; matching an outbound request is
-    /// caller-owned.
+    /// caller-owned. Empty for an error the server could not tie to a request (null id).
     std::string id;
 
     /// JSON-RPC protocol version reported by the Information Layer.
