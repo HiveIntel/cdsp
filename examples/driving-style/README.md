@@ -12,6 +12,7 @@ driving-style/
 │   └── rdf4j/
 ├── data-generator/        # scene definitions, generator, and stream player
 ├── launch/                # isolated IL/KL launch artifacts
+├── rdf-mapper-demo/       # standalone KL RDF mapper demo (SHACL -> RDF)
 └── README.md
 ```
 

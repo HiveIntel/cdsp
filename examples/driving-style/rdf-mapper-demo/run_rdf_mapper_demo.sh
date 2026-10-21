@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-module_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-knowledge_layer_dir="$(cd "${module_dir}/.." && pwd)"
-repository_dir="$(cd "${knowledge_layer_dir}/../.." && pwd)"
+demo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+repository_dir="$(cd "${demo_dir}/../../.." && pwd)"
+knowledge_layer_dir="${repository_dir}/cdsp/knowledge-layer"
+module_dir="${knowledge_layer_dir}/rdf-mapper"
 
 if [[ $# -gt 4 ]]; then
     echo "Usage: $0 [fixture-directory] [vehicle-id] [instance-base-iri] [turtle|ntriples|nquads|trig]" >&2
@@ -155,7 +156,7 @@ echo "[rdf-mapper-demo] Building ${binary}"
     "-I${knowledge_layer_dir}/connection/il-protocol/include" \
     "-I${json_include_directory}" \
     "${serd_cxxflags[@]}" \
-    "${module_dir}/rdf_mapper_demo.cpp" \
+    "${demo_dir}/rdf_mapper_demo.cpp" \
     "${module_dir}/src/rdf_mapper.cpp" \
     "${module_dir}/src/rdf_model.cpp" \
     "${module_dir}/src/serd_rdf_reader.cpp" \

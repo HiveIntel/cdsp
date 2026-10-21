@@ -2,88 +2,51 @@
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix sosa: <http://www.w3.org/ns/sosa/> .
 @prefix val: <http://example.ontology.com/validation#> .
+@prefix vss: <https://covesa.org/vss/latest/model#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
+# One sosa:Observation per IL data point, in rdf-mapper conventions
+# (see cdsp/knowledge-layer/rdf-mapper/README.md):
+# - vss:path is the exact IL path (absolute-root subscriptions);
+# - each property has exactly one binding: sh:node (vehicle part), sh:hasValue
+#   (constant) or vss:value "value" / "timestamp" (with sh:datatype).
+# The output vocabulary (sosa:observedProperty car:*, sosa:hasSimpleResult,
+# sosa:phenomenonTime) is what solutions/rdf4j/driving_style_rules.ttl expects.
+# Cardinality and range constraints document the data; the mapper ignores them.
 
 val:VehicleSpeedObservationShape a sh:NodeShape ;
-    sh:name "vehicle.speed" ;
+    vss:path "Vehicle.Speed" ;
     sh:targetClass sosa:Observation ;
-    val:iriPrefix "car:ob_speed_" ;
     sh:property [
-        sh:name "id" ;
         sh:path sosa:hasFeatureOfInterest ;
         sh:node val:VehicleShape ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
-        sh:name "constant" ;
         sh:path sosa:observedProperty ;
         sh:hasValue car:speed ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
-        sh:name "value" ;
         sh:path sosa:hasSimpleResult ;
+        vss:value "value" ;
         sh:datatype xsd:float ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
-        sh:name "timestamp" ;
         sh:path sosa:phenomenonTime ;
+        vss:value "timestamp" ;
         sh:datatype xsd:dateTime ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] .
 
-
-    
-val:VehicleShape a sh:NodeShape ;
-    sh:name "id" ;
-    sh:class car:Vehicle ;
-    val:iriPrefix "car:Vehicle" ;
-    sh:property [
-        sh:path car:hasPart ;
-        sh:node val:ChassisShape ;
-        sh:nodeKind sh:IRI ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-    ] ;
-    sh:property [
-        sh:path car:hasSignal ;
-        sh:node val:CurrentLocationShape ;
-        sh:nodeKind sh:IRI ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-    ] .
-
-val:ChassisShape a sh:NodeShape ;
-    sh:name "id" ;
-    sh:class car:Chassis ;
-    val:iriPrefix "car:Chassis" ;
-    sh:property [
-        sh:path car:hasPart ;
-        sh:node val:SteeringWheelShape ;
-        sh:nodeKind sh:IRI ;
-        sh:minCount 1 ;
-    ] .
-
-val:SteeringWheelShape a sh:NodeShape ;
-    sh:name "id" ;
-    sh:class car:SteeringWheel ;
-    val:iriPrefix "car:SteeringWheel" .
-
-val:CurrentLocationShape a sh:NodeShape ;
-    sh:name "id" ;
-    sh:class car:CurrentLocation ;
-    val:iriPrefix "car:CurrentLocation" .
-
 val:VehicleChassisSteeringWheelAngleObservationShape a sh:NodeShape ;
-    sh:name "vehicle.chassis.steeringwheel.angle" ;
+    vss:path "Vehicle.Chassis.SteeringWheel.Angle" ;
     sh:targetClass sosa:Observation ;
-    val:iriPrefix "car:ob_angle_" ;
     sh:property [
         sh:path sosa:hasFeatureOfInterest ;
         sh:node val:SteeringWheelShape ;
@@ -91,31 +54,29 @@ val:VehicleChassisSteeringWheelAngleObservationShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
-        sh:name "value" ;
-        sh:path sosa:hasSimpleResult ;
-        sh:datatype xsd:int ;
-        sh:minCount 1 ;
-        sh:maxCount 1 ;
-    ] ;
-    sh:property [
-        sh:name "constant" ;
         sh:path sosa:observedProperty ;
         sh:hasValue car:angle ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
-        sh:name "timestamp" ;
+        sh:path sosa:hasSimpleResult ;
+        vss:value "value" ;
+        sh:datatype xsd:int ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
         sh:path sosa:phenomenonTime ;
+        vss:value "timestamp" ;
         sh:datatype xsd:dateTime ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] .
 
 val:VehicleCurrentLocationLatitudeObservationShape a sh:NodeShape ;
-    sh:name "vehicle.currentlocation.latitude" ;
+    vss:path "Vehicle.CurrentLocation.Latitude" ;
     sh:targetClass sosa:Observation ;
-    val:iriPrefix "car:ob_latitude_" ;
     sh:property [
         sh:path sosa:hasFeatureOfInterest ;
         sh:node val:CurrentLocationShape ;
@@ -123,15 +84,14 @@ val:VehicleCurrentLocationLatitudeObservationShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
-        sh:name "constant" ;
         sh:path sosa:observedProperty ;
         sh:hasValue car:latitude ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
-        sh:name "value" ;
         sh:path sosa:hasSimpleResult ;
+        vss:value "value" ;
         sh:datatype xsd:double ;
         sh:minInclusive -90 ;
         sh:maxInclusive 90 ;
@@ -139,17 +99,16 @@ val:VehicleCurrentLocationLatitudeObservationShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
-        sh:name "timestamp" ;
         sh:path sosa:phenomenonTime ;
+        vss:value "timestamp" ;
         sh:datatype xsd:dateTime ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] .
 
 val:VehicleCurrentLocationLongitudeObservationShape a sh:NodeShape ;
-    sh:name "vehicle.currentlocation.longitude" ;
+    vss:path "Vehicle.CurrentLocation.Longitude" ;
     sh:targetClass sosa:Observation ;
-    val:iriPrefix "car:ob_longitude_" ;
     sh:property [
         sh:path sosa:hasFeatureOfInterest ;
         sh:node val:CurrentLocationShape ;
@@ -157,15 +116,14 @@ val:VehicleCurrentLocationLongitudeObservationShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
-        sh:name "constant" ;
         sh:path sosa:observedProperty ;
         sh:hasValue car:longitude ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
-        sh:name "value" ;
         sh:path sosa:hasSimpleResult ;
+        vss:value "value" ;
         sh:datatype xsd:double ;
         sh:minInclusive -180 ;
         sh:maxInclusive 180 ;
@@ -173,11 +131,9 @@ val:VehicleCurrentLocationLongitudeObservationShape a sh:NodeShape ;
         sh:maxCount 1 ;
     ] ;
     sh:property [
-        sh:name "timestamp" ;
         sh:path sosa:phenomenonTime ;
+        vss:value "timestamp" ;
         sh:datatype xsd:dateTime ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
     ] .
-
-
