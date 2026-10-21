@@ -1,217 +1,188 @@
-# Knowledge Layer - WebSocket Client
+# Knowledge Layer
 
-This project contains a WebSocket client built in C++17, which communicates with a WebSocket server. The client can send and receive JSON messages using Boost libraries.
+The Knowledge Layer (KL) subscribes to vehicle signals from the Information
+Layer (IL), turns each update into RDF, lets a reasoner derive new knowledge
+from it, and writes the results back to the IL.
 
-## Project Structure
-
-- **[Connector Module](./connector/):** manages communication between the WebSocket client and external systems.
-- **[Symbolic Reasoner](./symbolic-reasoner/):** is designed as a flexible reasoning framework that can integrate with various semantic reasoning engines.
-- **[Numeric Analyzer](./numeric-analyzer/):**
-- **[Common Test Resources](./common-test-resources/):** provides utility classes and helpers to streamline testing across all modules. This includes mock objects, test data generators, and reusable test fixtures.
-- **[Third Party](./third_party/):** contains external dependencies and libraries that are not part of the standard C++ libraries or are not available via package managers.
-
-## Prerequisites
-
-Before setting up the project, make sure you have the following installed:
-
-- **CMake** (version 3.25 or higher)
-- **Boost** (version 1.86.0 or higher)
-- **g++/clang++** with C++17 support
-- **Homebrew** (for macOS users)
-- A WebSocket server to connect to, see how to start the **information-layer** Websocket server [here](../information-layer/README.md)
-
-### Installing Dependencies
-
-1. **Install g++**:
-   On windows you may use mingw, e.g. you can install mingw64 with msys64 from here: https://www.msys2.org/
-
-   Open the MSYS2 MinGW64 Shell. Make sure you're using the MSYS2 MinGW64 Shell (not the regular MSYS2 shell), as this is required for using the 64-bit GCC toolchain. You can find this in the Start menu as MSYS2 MinGW 64-bit. Run the following command:
-
-   ```bash
-   pacman -Syu  # Update MSYS2 packages
-   pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-make  # Install 64-bit GCC and Make
-   ```
-
-   After the installation, verify that gcc and g++ are installed and accessible in the MSYS2 MinGW64 shell by running:
-
-   ```bash
-   gcc --version
-   g++ --version
-   ```
-
-   You should see the version information for the installed GCC toolchain.
-
-2. **Install Boost**:
-   If you're on macOS, you can install Boost using Homebrew:
-
-   ```bash
-   brew install boost
-   ```
-
-   For Linux, you can install Boost using your package manager, or build from source:
-
-   ```bash
-   sudo apt-get install libboost-all-dev
-   ```
-
-   On Windows you can download a zipfile or take an installer, e.g. from here: https://sourceforge.net/projects/boost/files/boost-binaries/. To use all functionality you have to build the boost library with the gcc compiler.
-
-   Open the MSYS2 MinGW64 Shell from the Start menu (not the standard MSYS2 shell), navigate to your Boost directory and build:
-
-   ```bash
-   cd /c/path/to/boost_1_86_0
-   ./bootstrap.sh gcc
-   ./b2 --with-system --with-filesystem --with-thread
-   ```
-
-   Important Note: When you want to build the projekt with cmake later, cmake often expects specific library names. So if it does not find the libraries, you have to rename them, e.g.:
-
-   **libboost_system-mgw14-mt-x64-1_86.a** to **libboost_system.a** for the release version and
-   **libboost_system-mgw14-mt-d-x64-1_86.a** tp **libboost_system-d.a** for the debug version.
-
-   And the same for filesystem, thread, atomic and chrono.
-
-3. **Install CMake**:
-   Ensure you have CMake installed:
-
-   ```bash
-   brew install cmake  # For macOS
-   sudo apt-get install cmake  # For Linux
-   ```
-
-   On Windows you can get an installer here: https://cmake.org/download/.
-
-   Make sure you have Windows SDK 10 installed. To check start the Visual Studio Installer (https://developer.microsoft.com/en-us/windows/downloads/windows-sdk/) and look for Visual Studio Build Tools. Here look for the component 'Desktop development with C++' and install it if required.
-
-## Project Setup
-
-**Build the WebSocket Client**:
-
-The WebSocket client is located in the `cdsp/knowledge_layer/` directory. To build it from this directory:
-
-```bash
-# Create a build directory
-mkdir -p build
-cd build
-
-# Run CMake to generate build files
-# For Mac:
-cmake ..
-# For Windows you have to specify the location of the boost libraries:
-cmake -DBOOST_ROOT=<path/to/boost> -DBOOST_LIBRARYDIR=<path/to/boost>/stage/lib ..
-
-# Build the project
-make
-```
-
-If the build is successful, the WebSocket client executable will be generated in the `build/bin/` directory.
-
-## Running the Reasoner WebSocket Client
-
-The [Reasoner client](./connector/websocket-client/README.md) integrates with both the WebSocket server and the RDFox triple store. The client processes incoming messages and generates RDF triples, which are then stored in RDFox.
-
-### WebSocket Server and Reasoner Configuration
-
-The project requires certain environment variables to work with the WebSocket server and the reasoner server. By default, the WebSocket client connects to the WebSocket server located in the [`information-layer`](../information-layer/README.md). Two reasoning engines are supported: **RDFox** and **RDF4J** (see [Choosing a Reasoning Engine](#choosing-a-reasoning-engine)).
-
-- **HOST_WEBSOCKET_SERVER:** Specifies the hostname of the WebSocket server. The default is `127.0.0.1`.
-- **PORT_WEBSOCKET_SERVER:** Specifies the port for connecting to the WebSocket server. The default is `8080`.
-- **TARGET_WEBSOCKET_SERVER:** The target endpoint on the WebSocket server to which the client will connect. The default is empty string.
-- **[SCHEMA]\_OBJECT_ID:** The Object ID environment variable is required to subscribe and retrieve information for a specific object, such as a VIN (Vehicle Identification Number) when working with Vehicle Signal Specification (VSS) data. [SCHEMA] represents the schema type being used, such as VEHICLE. For example, if you are working with Vehicle data under the VSS schema, the environment variable should be set as: `VEHICLE_OBJECT_ID`. Use the Object ID configured in the [`information-layer`](../information-layer/README.md).
-- **HOST_REASONER_SERVER:** Hostname of the reasoner server. The default is `127.0.0.1`.
-- **PORT_REASONER_SERVER:** Port for the reasoner server. The default is `12110`.
-- **AUTH_REASONER_SERVER_BASE64:** Base64-encoded credentials for reasoner authentication. The default is `cm9vdDphZG1pbg==` (`root:admin` in base64). Required for RDFox; ignored by RDF4J.
-- **REASONER_DATASTORE_NAME:** Data store used in the reasoner server to store the generated data. The default is `ds-test`.
-- **REASONER_ORIGIN_SYSTEM_NAME:** Origin system name for the reasoner server used to identify the source of the data. The default is `SemanticReasoner`.
-- **MODEL_CONFIGURATION_PATH:** Path to the model configuration file used by the reasoner client. The default is `/symbolic-reasoner/examples/use-case/rdfox_model/`.
-
-You can customize the configuration by adding the following environment variables in the `/docker/.env` file. Below is an example of what the file could look like:
+## Pipeline
 
 ```text
-##################################
-# WEBSOCKET-SERVER CONFIGURATION #
-##################################
-
-HOST_WEBSOCKET_SERVER="your_custom_host"
-PORT_WEBSOCKET_SERVER="your_custom_port"
-TARGET_WEBSOCKET_SERVER="your_custom_target_endpoint"
-VEHICLE_OBJECT_ID="vin_to_subscribe"
-
-##################################
-# REASONER CONFIGURATION         #
-##################################
-
-HOST_REASONER_SERVER="your_reasoner_server_host"
-PORT_REASONER_SERVER="your_reasoner_server_port"
-AUTH_REASONER_SERVER_BASE64="your_reasoner_server_authentication"
-REASONER_DATASTORE_NAME="your_reasoner_server_data_store"
-MODEL_CONFIGURATION_PATH="path_to_your_model_config"
+                  ┌──────────────────────── on-message callback ─────────────────────────┐
+Information ──WS──► ws-connection ─► il-protocol ─► rdf-mapper ─► Turtle ─► reasoner-engine │
+Layer (IL)        │  (text frames)   ILMessageParser  RDFMapper            ReasonerService  │
+   ▲              └──────────────────  DataMessageDTO ──────────────────────────┬───────────┘
+   │                                                                            │ result (JSON)
+   └──WS── ws-connection ◄── il-protocol SetRequestDTO (JSON-RPC "set") ◄──────┘
 ```
 
-### Choosing a Reasoning Engine
+1. **Subscribe.** After the WebSocket handshake, the KL sends one
+   `SubscribeRequestDTO` per signal in the model configuration.
+2. **Receive.** `ws-connection` delivers each IL text message to the
+   on-message callback.
+3. **Parse.** `ILMessageParser::parseWire` turns it into a
+   `DataMessageDTO` (paths, typed values, generated timestamps). Status and
+   error replies are handled separately.
+4. **Map.** `RDFMapper::signalToRdf` turns the data points into Turtle using the
+   vehicle and signal SHACL shapes from the model configuration.
+5. **Reason.** `ReasonerService::updateData(turtle, ReasonerSyntaxType::TURTLE)`
+   feeds the graph to the engine selected by the reasoner profile. Results are
+   delivered as JSON through the result handler (or queue).
+6. **Write back.** Each result is converted to a `SetRequestDTO` and sent to
+   the IL through the same WebSocket connection.
 
-The reasoning engine is selected via the `inference_engine` field in `model_config.json` inside the model directory pointed to by `MODEL_CONFIGURATION_PATH`. Two engines are supported:
+### Status
 
-| Engine | `inference_engine` | Docker service | Model path (Hello World example) |
-|--------|-------------------|----------------|----------------------------------|
-| RDFox  | `"RDFox"`  | `rdfox-service` (requires license) | `KL-config/rdfox_model/` |
-| RDF4J  | `"RDF4J"`  | `rdf4j-stream-reasoner-service` | `KL-config/rdf4j_model/` |
+The pipeline is not wired end to end yet; reasoning is still work in progress.
 
-To switch engines, set `HOST_REASONER_SERVER` to the target service and point `MODEL_CONFIGURATION_PATH` to the corresponding model directory. No code changes are required.
+| Step | Status |
+|---|---|
+| 1–3 Subscribe, receive, parse | Implemented in `driving_style_client` (`src/main.cpp`), which currently **prints** each parsed message. |
+| 4 Map to Turtle | `rdf-mapper` is implemented and tested, but not yet called from `main.cpp`. |
+| 5 Reason | `ReasonerService` contract, profiles and factory exist. RDF4J and CQELS services are placeholders that return failure. |
+| 6 Write back | `SetRequestDTO` serialization exists. The mapping from a reasoning result to SET requests is not defined yet. |
 
-- RDFox uses Datalog rules (`.dlog`) and requires a license file. See [docker/README.md](/docker/README.md#rdfox-restful-api).
-- RDF4J uses SHACL `sh:SPARQLRule` CONSTRUCT patterns (`.shacl`) and requires no license. See [docker/rdf4j/README.md](/docker/rdf4j/README.md).
+The driving-style shapes in `examples/driving-style/model/shapes/` follow the
+`rdf-mapper` conventions. Mapping the generated `scene01.jsonl` stream with them
+and applying `solutions/rdf4j/driving_style_rules.ttl` offline (rdflib, not
+RDF4J) detects the aggressive-driving segment, so steps 4 and 5 agree on the
+vocabulary. See the [TODO list](#todo) for what is still missing.
 
-### Start the Reasoner Websocket Client
+## Modules
 
-After successfully building the client, you can run it with the following command (VIN is required, if any docker for the knowledge layer is running):
+| Module | CMake target | Role |
+|---|---|---|
+| [`connection/ws-connection`](connection/ws-connection/README.md) | `ws-connection` | Asynchronous text WebSocket client (Boost.Beast) |
+| [`connection/il-protocol`](connection/il-protocol/README.md) | `il-protocol` | IL JSON-RPC request DTOs and typed response parsing |
+| [`rdf-mapper`](rdf-mapper/README.md) | `rdf-mapper` | SHACL-driven mapping from IL data to RDF, Serd reader/writer |
+| [`config-parser`](config-parser/README.md) | `config-parser` | Model configuration: signals, SHACL shape files, reasoner profile |
+| [`reasoner-engine`](reasoner-engine/README.md) | `reasoner-engine` | Reasoner profiles, factory and pull/push service contracts |
+| `src/main.cpp` | `driving_style_client` | Composition root (steps 1–3 today) |
 
-```bash
-VEHICLE_OBJECT_ID="vin_to_subscribe" ./build/bin/reasoner_client
+`il-protocol` does not depend on the transport, so `rdf-mapper` uses its DTOs
+without linking `ws-connection`.
+
+## Configuration
+
+`driving_style_client` reads:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `MODEL_CONFIG` | required | Path to the model configuration JSON |
+| `HOST_WEBSOCKET_SERVER` | `127.0.0.1` | IL WebSocket host |
+| `PORT_WEBSOCKET_SERVER` | `8080` | IL WebSocket port |
+| `WEBSOCKET_TARGET` | `/` | HTTP target of the WebSocket handshake |
+| `VEHICLE_OBJECT_ID` | `VIN_1805` | IL instance (vehicle) to subscribe to |
+
+The model configuration (parsed by `config-parser`) declares the input signals,
+the SHACL shapes and the reasoner profile:
+
+```json
+{
+  "input": {
+    "signals": ["Speed", "CurrentLocation.Latitude"],
+    "rdf_shapes": {
+      "vehicle": "shapes/vehicle_shape.shacl.ttl",
+      "signal": "shapes/signals_shapes.shacl.ttl"
+    }
+  },
+  "reasoner_profile": "../solutions/rdf4j/driving_style_rdf4j.json"
+}
 ```
 
-To display a list of available environment variables and their default values, run the application with the `--help` flag:
+## Build and test
 
-```bash
-./reasoner_client --help
-```
-
-### Using the Reasoner API in the Client
-
-The WebSocket client integrates with the [TripleAssembler](./connector/json-rdf-convertor/rdf-writer/README.md) component, which converts incoming data into RDF triples and pushes them to the configured reasoner server via its REST API. The reasoner applies inference rules and makes results available for querying.
-
-This integration allows the Reasoner client to interpret data, create RDF triples, and store them in a semantic knowledge graph, enabling rich queries and reasoning capabilities regardless of the underlying engine.
-
-# Running Tests in C++
-
-This module includes a suite of tests to ensure functionality. You can run all tests using **CTest** or execute specific test binaries directly from the `./build/bin/tests/` directory.
-
-## Running All Tests with CTest
-
-From the build directory, run:
+The root project requires CMake 3.25 or newer and Boost 1.87 (system). It
+uses installed nlohmann/json, Serd and GoogleTest when available and fetches
+them otherwise. From the repository root:
 
 ```sh
-ctest
+cmake -S cdsp/knowledge-layer -B build/knowledge-layer -DKL_BUILD_TESTS=ON
+cmake --build build/knowledge-layer
+ctest --test-dir build/knowledge-layer --output-on-failure
 ```
 
-or
+The tests do not need a running IL; the WebSocket tests use a loopback server.
+To run the client against a real IL:
 
 ```sh
-ctest --output-on-failure
+MODEL_CONFIG=examples/driving-style/model/driving_style_reasoning.json \
+  build/knowledge-layer/bin/driving_style_client
 ```
 
-This executes all registered tests and displays failures in detail.
+### RDF mapper demo
 
-## Running a Specific Test
-
-To execute a specific test binary, navigate to the `./build/bin/tests/` directory and run:
+[`examples/driving-style/rdf-mapper-demo`](../../examples/driving-style/rdf-mapper-demo/)
+maps sample speed and location messages with the `rdf-mapper` test fixtures and
+prints the triples and serialized RDF:
 
 ```sh
-./build/bin/tests/<test_executable>
+examples/driving-style/rdf-mapper-demo/run_rdf_mapper_demo.sh
+examples/driving-style/rdf-mapper-demo/run_rdf_mapper_demo.sh \
+  path/to/fixtures VIN_12345 https://example.org/instances/ turtle
 ```
 
-For example:
+If Serd or nlohmann/json is not found automatically, set
+`SERD_INCLUDE_DIR`/`SERD_LIBRARY` and `JSON_INCLUDE_DIR`.
 
-```sh
-./build/bin/tests/websocket_client_integration_test
-```
+## TODO
+
+### Wire the pipeline (`src/main.cpp`)
+
+- [ ] Build an `RDFMapper` from the model configuration's `rdf_shapes.vehicle`
+      and `rdf_shapes.signal`, resolving them relative to the configuration
+      file (`config-parser` keeps paths as declared).
+- [ ] Choose the instance base IRI (new environment variable or model setting)
+      and use `VEHICLE_OBJECT_ID` as the mapper's vehicle ID.
+- [ ] In the on-message callback, map each `DataMessageDTO` with
+      `signalToRdf`; log and skip a message that fails to map instead of
+      stopping the client.
+- [ ] Create the reasoner with `ReasonerFactory::initReasoner` from
+      `reasoner_profile`, then load its ontology and rules.
+- [ ] Pass each Turtle document to `ReasonerService::updateData`. Engine calls
+      may block, so run them off the WebSocket strand and post results back
+      through `setReasoningResultHandler`.
+- [ ] Define how a reasoning result (for example the driving-style query
+      columns `Vehicle_DrivingStyle_*`) becomes IL paths and values, build
+      `SetRequestDTO`s and `send()` them.
+
+### Reasoner engine
+
+- [ ] Implement the RDF4J service (HTTP to the profile's `endpoint`) and the
+      CQELS service; both are placeholders today.
+- [ ] Decide how long observations stay in the engine's store. Every update
+      adds triples, and the time-window rules only need recent ones.
+- [ ] Add tests for `reasoner-engine` (profile parsing, factory, pull/push
+      flow with a fake engine).
+- [ ] Update `reasoner-engine/README.md`: it still says the result queue is
+      owned by `WebSocketClient`.
+
+### rdf-mapper
+
+- [ ] Accept several signal shape files in one mapper, instead of one mapper
+      (and one vehicle parse) per signal file.
+- [ ] Parse the two shape files without sharing `@base` and blank-node labels
+      (today they are concatenated into one Turtle document).
+- [ ] Allow one part shape under several parents (repeated VSS branches such
+      as seat rows), which the single-parent tree rule rejects.
+- [ ] Support `xsd:decimal` values.
+- [ ] Emit literal vehicle properties (for example `vss:id`) if the reasoner
+      needs them; the vehicle graph is structural only.
+
+### Connection
+
+- [ ] Reconnect after the IL drops the connection; a `WebSocketClient` makes a
+      single attempt, so the KL needs to create a new client and resubscribe.
+- [ ] Make `send()` after a peer close non-fatal; it currently throws
+      `std::logic_error`.
+- [ ] Use unique request ids if responses must be matched to requests; ids
+      are currently derived from method, instance, schema and path.
+
+### Build
+
+- [ ] Align the Boost requirement (root project: 1.87; Ubuntu 22.04 ships
+      1.74) and document the minimum CMake version (3.25) for developers.
+
+## Retired components
+
+The legacy connector, BO/DTO layer, TripleAssembler, RDFox client and
+GeographicLib integration have been removed and are not part of the build.

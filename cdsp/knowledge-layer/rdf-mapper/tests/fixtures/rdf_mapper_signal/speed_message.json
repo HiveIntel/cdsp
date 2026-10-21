@@ -1,0 +1,24 @@
+{
+    "jsonrpc": "2.0",
+    "id": "sub-speed",
+    "result": {
+        "instance": "VIN_1805",
+        "data": {
+            "Vehicle.Speed": 42.5
+        },
+        "metadata": {
+            "Vehicle.Speed": {
+                "timestamps": {
+                    "generated": {
+                        "seconds": 1776429129,
+                        "nanos": 853211000
+                    },
+                    "received": {
+                        "seconds": 1778148820,
+                        "nanos": 535000000
+                    }
+                }
+            }
+        }
+    }
+}

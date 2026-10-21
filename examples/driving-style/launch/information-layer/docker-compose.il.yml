@@ -1,0 +1,48 @@
+name: driving-style-il-wip
+
+services:
+  iotdb-service:
+    hostname: iotdb-service
+    build:
+      context: ../../../../docker/iotdb
+      args:
+        IOTDB_VERSION: 2.0.6
+        SERVICE_HOSTNAME: iotdb-service
+    ports:
+      - "6667:6667"
+    volumes:
+      - ./runtime/iotdb-data:/iotdb/data
+      - ./runtime/iotdb-logs:/iotdb/logs
+    environment:
+      cn_internal_address: iotdb-service
+      cn_internal_port: 10710
+      cn_consensus_port: 10720
+      cn_seed_config_node: iotdb-service:10710
+      dn_rpc_address: iotdb-service
+      dn_internal_address: iotdb-service
+      dn_rpc_port: 6667
+      dn_mpp_data_exchange_port: 10740
+      dn_schema_region_consensus_port: 10750
+      dn_data_region_consensus_port: 10760
+      dn_seed_config_node: iotdb-service:10710
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18080/ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  information-layer:
+    build:
+      context: ../../../../cdsp/information-layer
+      dockerfile: Dockerfile
+    depends_on:
+      iotdb-service:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./runtime/logs/information-layer:/app/logs
+    environment:
+      HANDLER_TYPE: iotdb
+      IOTDB_HOST: iotdb-service

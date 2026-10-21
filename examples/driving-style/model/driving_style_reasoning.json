@@ -1,0 +1,15 @@
+{
+    "input":{
+      "signals":[
+        "Chassis.SteeringWheel.Angle",
+        "CurrentLocation.Latitude",
+        "CurrentLocation.Longitude",
+        "Speed"
+      ],
+      "rdf_shapes":{
+        "vehicle":"shapes/vehicle_shape.shacl.ttl",
+        "signal":"shapes/signals_shapes.shacl.ttl"
+      }
+    },
+    "reasoner_profile":"../solutions/rdf4j/driving_style_rdf4j.json"
+}

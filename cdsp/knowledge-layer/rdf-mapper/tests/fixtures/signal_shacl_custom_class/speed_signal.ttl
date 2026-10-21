@@ -1,0 +1,24 @@
+@prefix cdsp: <http://covesa.org/cdsp_kl#> .
+@prefix ex: <https://example.org/ontology#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix vss: <https://covesa.org/vss/latest/model#> .
+@prefix vsssh: <https://covesa.org/vss/latest/shapes#> .
+
+cdsp:VehicleSpeedSignalShape a sh:NodeShape ;
+    vss:path "Vehicle.Speed" ;
+    sh:targetClass ex:Signal ;
+    sh:property [
+        sh:path ex:ofVehicle ;
+        sh:node vsssh:Vehicle ;
+    ] ;
+    sh:property [
+        vss:value "value" ;
+        sh:path ex:value ;
+        sh:datatype xsd:float ;
+    ] ;
+    sh:property [
+        vss:value "timestamp" ;
+        sh:path ex:generatedAt ;
+        sh:datatype xsd:dateTime ;
+    ] .

@@ -1,0 +1,43 @@
+@prefix car: <http://example.ontology.com/car#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix val: <http://example.ontology.com/validation#> .
+
+# Vehicle structure for the driving-style example, in rdf-mapper conventions
+# (see cdsp/knowledge-layer/rdf-mapper/README.md):
+# - every shape without vss:path is part of one vehicle tree rooted at car:Vehicle;
+# - a property with sh:path + sh:node is a containment edge <parent> sh:path <child>;
+# - a child's target class is named <parent class>_<Segment>, and Segment becomes
+#   its instance IRI component (<base>Vehicle_<id>/Chassis/SteeringWheel).
+
+val:VehicleShape a sh:NodeShape ;
+    sh:targetClass car:Vehicle ;
+    sh:property [
+        sh:path car:hasPart ;
+        sh:node val:ChassisShape ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path car:hasSignal ;
+        sh:node val:CurrentLocationShape ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+val:ChassisShape a sh:NodeShape ;
+    sh:targetClass car:Vehicle_Chassis ;
+    sh:property [
+        sh:path car:hasPart ;
+        sh:node val:SteeringWheelShape ;
+        sh:nodeKind sh:IRI ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+    ] .
+
+val:SteeringWheelShape a sh:NodeShape ;
+    sh:targetClass car:Vehicle_Chassis_SteeringWheel .
+
+val:CurrentLocationShape a sh:NodeShape ;
+    sh:targetClass car:Vehicle_CurrentLocation .

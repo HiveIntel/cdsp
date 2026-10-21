@@ -1,0 +1,11 @@
+{
+    "name":"RDF4J",
+    "ontologies": "driving_style_ontology.ttl",
+    "rules": "driving_style_rules.ttl",
+    "query": "driving_style_query.rq",
+    "endpoint": {
+        "host": "127.0.0.1",
+        "port": 12110,
+        "datastore": "driving-style"
+    }
+}
