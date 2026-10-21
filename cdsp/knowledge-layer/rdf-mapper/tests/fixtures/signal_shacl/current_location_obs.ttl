@@ -3,13 +3,14 @@
 @prefix sosa: <http://www.w3.org/ns/sosa/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix vss: <https://covesa.org/vss/latest/model#> .
+@prefix vsssh: <https://covesa.org/vss/latest/shapes#> .
 
 cdsp:VehicleLongitudeShape a sh:NodeShape ;
     vss:path "Vehicle.CurrentLocation.Longitude" ;
     sh:targetClass sosa:Observation ;
     sh:property [
         sh:path sosa:hasFeatureOfInterest ;
-        sh:class vss:Vehicle_CurrentLocation ;
+        sh:node vsssh:Vehicle_CurrentLocation ;
     ] ;
     sh:property [
         sh:path sosa:observedProperty ;
@@ -31,7 +32,7 @@ cdsp:VehicleLatitudeShape a sh:NodeShape ;
     sh:targetClass sosa:Observation ;
     sh:property [
         sh:path sosa:hasFeatureOfInterest ;
-        sh:hasValue vss:Vehicle_CurrentLocation ;
+        sh:node vsssh:Vehicle_CurrentLocation ;
     ] ;
     sh:property [
         sh:path sosa:observedProperty ;

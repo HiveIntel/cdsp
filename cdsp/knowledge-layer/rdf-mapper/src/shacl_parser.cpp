@@ -1,5 +1,10 @@
 #include "shacl_parser.h"
 
+/**
+ * @file shacl_parser.cpp
+ * @brief Two-pass extraction of mapper bindings from an owned RDF graph.
+ */
+
 #include <stdexcept>
 
 #include "serd_rdf_reader.h"
@@ -8,6 +13,7 @@ namespace rdf_mapper {
 
 namespace {
 
+/// Copies an IRI-valued binding or reports the predicate whose term category is invalid.
 RDFNode requireIri(const RDFNode& node, std::string_view predicate) {
     if (node.type != RDFNodeType::Iri) {
         throw std::runtime_error("SHACL predicate '" + std::string(predicate) +
@@ -16,6 +22,7 @@ RDFNode requireIri(const RDFNode& node, std::string_view predicate) {
     return node;
 }
 
+/// Copies a literal binding without interpreting its lexical value or datatype.
 RDFNode requireLiteral(const RDFNode& node, std::string_view predicate) {
     if (node.type != RDFNodeType::Literal) {
         throw std::runtime_error("SHACL predicate '" + std::string(predicate) +
@@ -24,6 +31,7 @@ RDFNode requireLiteral(const RDFNode& node, std::string_view predicate) {
     return node;
 }
 
+/// Reads a singleton literal binding; graph.object also rejects distinct competing values.
 std::optional<RDFNode> optionalLiteral(const RDFNode& subject, std::string_view predicate,
                                        const RDFGraph& graph) {
     const std::optional<RDFNode> object = graph.object(subject, predicate);
@@ -33,6 +41,7 @@ std::optional<RDFNode> optionalLiteral(const RDFNode& subject, std::string_view 
     return requireLiteral(*object, predicate);
 }
 
+/// Reads a singleton IRI binding, distinguishing an absent predicate from an invalid value.
 std::optional<RDFNode> optionalIri(const RDFNode& subject, std::string_view predicate,
                                    const RDFGraph& graph) {
     const std::optional<RDFNode> object = graph.object(subject, predicate);
@@ -42,6 +51,7 @@ std::optional<RDFNode> optionalIri(const RDFNode& subject, std::string_view pred
     return requireIri(*object, predicate);
 }
 
+/// Reads only a literal's owned lexical value; its optional datatype is intentionally discarded.
 std::optional<std::string> optionalLiteralValue(const RDFNode& subject, std::string_view predicate,
                                                 const RDFGraph& graph) {
     const std::optional<RDFNode> object = optionalLiteral(subject, predicate, graph);
@@ -64,11 +74,13 @@ bool SHACLParser::RDFNodeLess::operator()(const RDFNode& left, const RDFNode& ri
 }
 
 std::vector<NodeShapePtr> SHACLParser::parse(std::string_view turtle) {
+    // Complete RDF reading first: reader failures preserve the previous parser index.
     const RDFGraph graph(SerdRdfReader{}.read(turtle));
 
     const std::vector<RDFNode> node_shape_iris =
         graph.subjects(rdf::type, RDFNode::iri(std::string(shacl::node_shape)));
 
+    // Pass one establishes stable identities before any sh:node reference is resolved.
     node_shapes_map_.clear();
     for (const RDFNode& node_shape_iri : node_shape_iris) {
         node_shapes_map_.emplace(node_shape_iri, std::make_shared<NodeShape>());
@@ -77,6 +89,7 @@ std::vector<NodeShapePtr> SHACLParser::parse(std::string_view turtle) {
     std::vector<NodeShapePtr> node_shapes;
     node_shapes.reserve(node_shape_iris.size());
 
+    // Pass two fills the existing objects; replacing their shared_ptrs would break weak links.
     for (const RDFNode& node_shape_iri : node_shape_iris) {
         NodeShapePtr node_shape = node_shapes_map_.at(node_shape_iri);
         *node_shape = parseNodeShape(node_shape_iri, graph);
@@ -112,6 +125,7 @@ PropertyShape SHACLParser::parsePropertyShape(const RDFNode& property_node, cons
             throw std::runtime_error("SHACL predicate '" + std::string(shacl::node) +
                                      "' references a node that is not typed as sh:NodeShape");
         }
+        // Do not create a strong edge: legal cyclic references must not form ownership cycles.
         property.sh_node = referenced_entry->second;
     }
 

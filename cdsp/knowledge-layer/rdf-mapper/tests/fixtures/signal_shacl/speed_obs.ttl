@@ -10,7 +10,7 @@ cdsp:VehicleSpeedObservationShape a sh:NodeShape ;
     sh:targetClass sosa:Observation ;
     sh:property [
         sh:path sosa:hasFeatureOfInterest ;
-        sh:class vss:Vehicle ;
+        sh:node vsssh:Vehicle ;
     ] ;
     sh:property [
         sh:path sosa:observedProperty ;

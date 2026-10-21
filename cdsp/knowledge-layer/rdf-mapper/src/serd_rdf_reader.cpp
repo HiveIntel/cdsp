@@ -1,5 +1,10 @@
 #include "serd_rdf_reader.h"
 
+/**
+ * @file serd_rdf_reader.cpp
+ * @brief Owns Serd resources and copies callback terms into the C++ RDF model.
+ */
+
 #include <serd/serd.h>
 
 #include <cstdarg>
@@ -13,13 +18,19 @@
 namespace rdf_mapper {
 namespace {
 
+/// Per-call sink state; Serd borrows this object only during synchronous parsing/destruction.
 struct ParseContext {
+    /// Borrowed environment, whose owning handle outlives the reader and this context.
     SerdEnv* environment = nullptr;
+    /// Owned statements accumulated before the final status is checked.
     std::vector<RDFTriple> triples;
+    /// First successfully recorded adapter/conversion failure takes diagnostic precedence.
     std::string callback_error;
+    /// Most recent successfully formatted Serd diagnostic, used when parse status fails.
     std::string syntax_error;
 };
 
+/// Copies exactly n_bytes from a borrowed Serd term, including decoded literal text.
 std::string nodeText(const SerdNode& node) {
     if (node.buf == nullptr) {
         return {};
@@ -28,6 +39,8 @@ std::string nodeText(const SerdNode& node) {
     return {reinterpret_cast<const char*>(node.buf), node.n_bytes};
 }
 
+/// Best-effort first-error recording; failures while copying the supplied string stay inside here.
+/// Callers construct the string argument before entering this noexcept helper.
 void rememberCallbackError(ParseContext& context, const std::string& message) noexcept {
     if (!context.callback_error.empty()) {
         return;
@@ -40,6 +53,8 @@ void rememberCallbackError(ParseContext& context, const std::string& message) no
     }
 }
 
+/// Expands a borrowed URI/CURIE through the current environment and owns the resulting text.
+/// The temporary Serd allocation is freed even when the C++ string copy throws.
 std::optional<std::string> expandedIri(ParseContext& context, const SerdNode& node,
                                        const char* role) {
     if (node.type != SERD_URI && node.type != SERD_CURIE) {
@@ -65,6 +80,7 @@ std::optional<std::string> expandedIri(ParseContext& context, const SerdNode& no
     return value;
 }
 
+/// Converts an IRI/CURIE or permitted blank node; literal resource positions are rejected.
 std::optional<RDFNode> resourceNode(ParseContext& context, const SerdNode& node, const char* role,
                                     bool allow_blank_node) {
     if (node.type == SERD_BLANK && allow_blank_node) {
@@ -79,6 +95,7 @@ std::optional<RDFNode> resourceNode(ParseContext& context, const SerdNode& node,
     return RDFNode::iri(*iri);
 }
 
+/// Applies an in-document base directive and reports adapter failures as a Serd status.
 SerdStatus onBase(void* handle, const SerdNode* uri) noexcept {
     auto& context = *static_cast<ParseContext*>(handle);
 
@@ -97,6 +114,7 @@ SerdStatus onBase(void* handle, const SerdNode* uri) noexcept {
     return SERD_ERR_UNKNOWN;
 }
 
+/// Stores a prefix declaration before subsequent statement terms are expanded.
 SerdStatus onPrefix(void* handle, const SerdNode* name, const SerdNode* uri) noexcept {
     auto& context = *static_cast<ParseContext*>(handle);
 
@@ -115,6 +133,8 @@ SerdStatus onPrefix(void* handle, const SerdNode* name, const SerdNode* uri) noe
     return SERD_ERR_UNKNOWN;
 }
 
+/// Copies one supported statement; Serd retains ownership of all incoming term buffers.
+/// noexcept prevents unwinding across the C API; failure diagnostics are best effort.
 SerdStatus onStatement(void* handle, SerdStatementFlags flags, const SerdNode* graph,
                        const SerdNode* subject, const SerdNode* predicate, const SerdNode* object,
                        const SerdNode* object_datatype, const SerdNode* object_language) noexcept {
@@ -157,6 +177,7 @@ SerdStatus onStatement(void* handle, SerdStatementFlags flags, const SerdNode* g
             rdf_object = *resource;
         }
 
+        // The model retains semantic terms, not Turtle layout/abbreviation flags.
         context.triples.push_back({*rdf_subject, *rdf_predicate, std::move(rdf_object)});
         return SERD_SUCCESS;
     } catch (const std::exception& error) {
@@ -168,6 +189,8 @@ SerdStatus onStatement(void* handle, SerdStatementFlags flags, const SerdNode* g
     return SERD_ERR_UNKNOWN;
 }
 
+/// Formats the latest syntax diagnostic; detail is bounded by the fixed local buffer.
+/// Returning success acknowledges the error sink, not successful Turtle parsing.
 SerdStatus onError(void* handle, const SerdError* error) noexcept {
     auto& context = *static_cast<ParseContext*>(handle);
 
@@ -216,6 +239,8 @@ std::vector<RDFTriple> SerdRdfReader::read(std::string_view turtle) const {
     ParseContext context;
     context.environment = environment.get();
 
+    // No C handle deleter is registered: this stack context remains caller-owned.
+    // Declaration order destroys the reader before the context and environment it borrows.
     Reader reader(
         serd_reader_new(SERD_TURTLE, &context, nullptr, onBase, onPrefix, onStatement, nullptr),
         serd_reader_free);
@@ -226,10 +251,12 @@ std::vector<RDFTriple> SerdRdfReader::read(std::string_view turtle) const {
     serd_reader_set_strict(reader.get(), true);
     serd_reader_set_error_sink(reader.get(), onError, &context);
 
+    // Serd's string API needs null termination; keep this owned copy alive for the whole read.
     const std::string input(turtle);
     const SerdStatus status =
         serd_reader_read_string(reader.get(), reinterpret_cast<const uint8_t*>(input.c_str()));
 
+    // Prefer adapter errors over secondary parser status, and never return partial statements.
     if (!context.callback_error.empty()) {
         throw std::runtime_error(context.callback_error);
     }
