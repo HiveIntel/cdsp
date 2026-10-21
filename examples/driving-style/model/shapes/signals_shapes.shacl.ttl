@@ -7,7 +7,9 @@
 
 # One sosa:Observation per IL data point, in rdf-mapper conventions
 # (see cdsp/knowledge-layer/rdf-mapper/README.md):
-# - vss:path is the exact IL path (absolute-root subscriptions);
+# - vss:path is the exact key in the IL response. With absolute-root subscriptions
+#   the IL drops the schema prefix, so Vehicle.Speed arrives as "Speed"; these keys
+#   match the signals in ../driving_style_reasoning.json;
 # - each property has exactly one binding: sh:node (vehicle part), sh:hasValue
 #   (constant) or vss:value "value" / "timestamp" (with sh:datatype).
 # The output vocabulary (sosa:observedProperty car:*, sosa:hasSimpleResult,
@@ -15,7 +17,7 @@
 # Cardinality and range constraints document the data; the mapper ignores them.
 
 val:VehicleSpeedObservationShape a sh:NodeShape ;
-    vss:path "Vehicle.Speed" ;
+    vss:path "Speed" ;
     sh:targetClass sosa:Observation ;
     sh:property [
         sh:path sosa:hasFeatureOfInterest ;
@@ -45,7 +47,7 @@ val:VehicleSpeedObservationShape a sh:NodeShape ;
     ] .
 
 val:VehicleChassisSteeringWheelAngleObservationShape a sh:NodeShape ;
-    vss:path "Vehicle.Chassis.SteeringWheel.Angle" ;
+    vss:path "Chassis.SteeringWheel.Angle" ;
     sh:targetClass sosa:Observation ;
     sh:property [
         sh:path sosa:hasFeatureOfInterest ;
@@ -75,7 +77,7 @@ val:VehicleChassisSteeringWheelAngleObservationShape a sh:NodeShape ;
     ] .
 
 val:VehicleCurrentLocationLatitudeObservationShape a sh:NodeShape ;
-    vss:path "Vehicle.CurrentLocation.Latitude" ;
+    vss:path "CurrentLocation.Latitude" ;
     sh:targetClass sosa:Observation ;
     sh:property [
         sh:path sosa:hasFeatureOfInterest ;
@@ -107,7 +109,7 @@ val:VehicleCurrentLocationLatitudeObservationShape a sh:NodeShape ;
     ] .
 
 val:VehicleCurrentLocationLongitudeObservationShape a sh:NodeShape ;
-    vss:path "Vehicle.CurrentLocation.Longitude" ;
+    vss:path "CurrentLocation.Longitude" ;
     sh:targetClass sosa:Observation ;
     sh:property [
         sh:path sosa:hasFeatureOfInterest ;

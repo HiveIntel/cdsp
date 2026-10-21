@@ -144,9 +144,6 @@ If Serd or nlohmann/json is not found automatically, set
 - [ ] Define how a reasoning result (for example the driving-style query
       columns `Vehicle_DrivingStyle_*`) becomes IL paths and values, build
       `SetRequestDTO`s and `send()` them.
-- [ ] Check against a running IL that subscribing to relative paths
-      (`Speed`) with `root: absolute` returns the absolute paths
-      (`Vehicle.Speed`) used as `vss:path`.
 
 ### Reasoner engine
 

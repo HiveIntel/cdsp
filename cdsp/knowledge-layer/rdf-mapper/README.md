@@ -53,7 +53,7 @@ Signal shapes (`signals.ttl`):
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 cdsp:LatitudeShape a sh:NodeShape ;
-    vss:path "Vehicle.CurrentLocation.Latitude" ;   # exact IL path
+    vss:path "CurrentLocation.Latitude" ;           # exact IL response key
     sh:targetClass sosa:Observation ;
     sh:property [                                   # link to a vehicle part
         sh:path sosa:hasFeatureOfInterest ;
@@ -83,7 +83,7 @@ const rdf_mapper::RDFMapper mapper{"vehicle.ttl", "signals.ttl",
 const std::string turtle = mapper.signalToRdf(message, "VIN_1805");
 ```
 
-For an IL message with `Vehicle.CurrentLocation.Latitude = 60.5` generated at
+For an IL message with `CurrentLocation.Latitude = 60.5` generated at
 `2026-04-17T12:32:09.853211000Z`, the result is:
 
 ```turtle
@@ -141,7 +141,7 @@ IL data point to one RDF node.
 
 | Predicate | Rule |
 |---|---|
-| `vss:path` | The **exact** IL path, case-sensitive, including the `Vehicle.` prefix when the IL sends it (use `"root": "absolute"` subscriptions). Must be non-empty and unique across all signal shapes. |
+| `vss:path` | The **exact** key the IL sends, case-sensitive. With `"root": "absolute"` subscriptions the IL drops the schema prefix, so `Vehicle.CurrentLocation.Latitude` arrives as `CurrentLocation.Latitude`. Must be non-empty and unique across all signal shapes. |
 | `sh:targetClass` | Required. Becomes the node's `rdf:type`, and its lowercased local name becomes the IRI segment (`sosa:Observation` → `/observation/`). |
 
 ### Property bindings
@@ -183,9 +183,10 @@ constructor.
 <base>Vehicle_<vehicle ID>/<target class local name, lowercased>/<vss:path components>/<generated time>
 ```
 
-One leading `Vehicle.` is dropped from `vss:path`, and the remaining dot
-components become path segments. `Vehicle.CurrentLocation.Latitude` with
-`sosa:Observation` gives `…/observation/CurrentLocation/Latitude/<time>`.
+One leading `Vehicle.`, if present, is dropped from `vss:path`, and the
+remaining dot components become path segments. `CurrentLocation.Latitude` (or
+`Vehicle.CurrentLocation.Latitude`) with `sosa:Observation` gives
+`…/observation/CurrentLocation/Latitude/<time>`.
 
 The IRI depends only on the vehicle ID, the signal and its generated time, so
 replaying the same message produces the same IRI.
@@ -246,7 +247,7 @@ the two files.
 | `Unsupported signal value datatype` | The datatype is not in the table above. |
 | `Unsupported vss:value selector` | `vss:value` is not `"value"` or `"timestamp"`. |
 | `Signal sh:node must bind a reachable vehicle shape` | The `sh:node` target is a signal shape or not in the vehicle tree. |
-| `No signal shape for exact path` | The message path differs from every `vss:path` (relative path, other case, missing `Vehicle.`). |
+| `No signal shape for exact path` | The message key differs from every `vss:path` (other case, a `Vehicle.` prefix the IL does not send, or a relative-root key). |
 | `Signal requires exact-path generated metadata` | The metadata entry for that path is missing or has no `generated` time. |
 
 ## Build, test and demo
