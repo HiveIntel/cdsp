@@ -1,5 +1,3 @@
-import fs from "fs";
-import yaml from "js-yaml";
 import {
   DataContentMessage,
   ensureMessageType,
@@ -22,10 +20,17 @@ import {
   toResponseFormat,
 } from "../utils/transformations";
 import { databaseParams } from "./iotdb/config/database-params";
+import { loadDataPointSchema } from "./utils/schema/DataPointSchemaLoader";
+import { extractLeafNodesFromRequest } from "./utils/validation/NodeValidation";
+import {
+  createStatusMessage,
+  createErrorMessage,
+  createDataContentMessage,
+} from "./utils/response/ResponseBuilder";
 
 export abstract class HandlerBase {
   /**
-   * Function to use for sending messages to the client, so that formating and mapping is applied to all messages.
+   * Function to use for sending messages to the client, so that formatting and mapping is applied to all messages.
    * @private
    */
   private readonly sendMessage: (
@@ -57,7 +62,6 @@ export abstract class HandlerBase {
     vin: string,
   ): Promise<QueryResult>;
 
-  // Default implementations of required functions
   async authenticateAndConnect(): Promise<void> {
     logMessage(
       "authenticateAndConnect() is not implemented",
@@ -65,36 +69,14 @@ export abstract class HandlerBase {
     );
   }
 
-  async get(message: GetMessageType, ws: WebSocketWithId): Promise<void> {
-    const requestedDataPoints = this.getKnownDatapointsByPrefix(message.path);
-
-    if (requestedDataPoints.length === 0) {
-      // no valid datapoints found for requested path
-      this.sendRequestedDataPointsNotFoundErrorMsg(
-        ws,
-        message.path,
-        message.requestId,
-      );
-      return;
-    }
-
-    // Access the DB for the datapoints and their values
-    const queryResult = await this.getDataPointsFromDB(
-      requestedDataPoints,
-      message.instance,
-    );
-
-    this.sendGetResponseToClient(
-      queryResult,
-      message.instance,
-      requestedDataPoints,
-      ws,
-      message.requestId,
-      message.path,
-      message.root,
-      message.format,
-    );
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  protected async get(
+    _message: GetMessageType,
+    _ws: WebSocketWithId,
+  ): Promise<void> {
+    logMessage("get() is not implemented", LogMessageType.WARNING);
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
   protected sendRequestedDataPointsNotFoundErrorMsg(
     ws: WebSocketWithId,
@@ -127,64 +109,78 @@ export abstract class HandlerBase {
     );
     this.sendMessageToClient(ws, statusMessage);
   }
-
-  protected set(message: SetMessageType, ws: WebSocketWithId): void {
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  protected set(_message: SetMessageType, _ws: WebSocketWithId): Promise<void> {
     logMessage("set() is not implemented", LogMessageType.WARNING);
+    return Promise.resolve();
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   protected subscribe(
-    message: SubscribeMessageType,
-    ws: WebSocketWithId,
-  ): void {
+    _message: SubscribeMessageType,
+    _ws: WebSocketWithId,
+  ): Promise<void> {
     logMessage("subscribe() is not implemented", LogMessageType.WARNING);
+    return Promise.resolve();
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   protected unsubscribe(
-    message: UnsubscribeMessageType,
-    ws: WebSocketWithId,
-  ): void {
+    _message: UnsubscribeMessageType,
+    _ws: WebSocketWithId,
+  ): Promise<void> {
     logMessage("unsubscribe() is not implemented", LogMessageType.WARNING);
+    return Promise.resolve();
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
-  unsubscribe_client(ws: WebSocketWithId): void {
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  unsubscribeClient(_ws: WebSocketWithId): void {
     logMessage(
-      "unsubscribe_client() is not implemented",
+      "unsubscribeClient() is not implemented",
       LogMessageType.WARNING,
     );
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
   handleMessage(message: NewMessage, ws: WebSocketWithId): void {
     try {
       switch (message.type) {
-        case "get":
+        case "get": {
           const aGetMessage = ensureMessageType<GetMessageType>(
             message,
             NewMessageType.Get,
           );
           void this.get(aGetMessage, ws);
           break;
-        case "set":
+        }
+        case "set": {
           const aSetMessage = ensureMessageType<SetMessageType>(
             message,
             NewMessageType.Set,
           );
-          this.set(aSetMessage, ws);
+          void this.set(aSetMessage, ws);
           break;
-        case "subscribe":
+        }
+        case "subscribe": {
           const aSubscribeMessage = ensureMessageType<SubscribeMessageType>(
             message,
             NewMessageType.Subscribe,
           );
-          this.subscribe(aSubscribeMessage, ws);
+          void this.subscribe(aSubscribeMessage, ws);
           break;
-        case "unsubscribe":
+        }
+        case "unsubscribe": {
           const anUnsubscribeMessage =
             ensureMessageType<UnsubscribeMessageType>(
               message,
               NewMessageType.Unsubscribe,
             );
-          this.unsubscribe(anUnsubscribeMessage, ws);
+          void this.unsubscribe(anUnsubscribeMessage, ws);
           break;
+        }
         default:
           throw new Error("Unknown message type.");
       }
@@ -255,9 +251,6 @@ export abstract class HandlerBase {
     this.sendMessageToClient(ws, responseMessage);
   }
 
-  /**
-   * Sends a message to the client.
-   */
   protected sendMessageToClient(
     ws: WebSocketWithId,
     message: StatusMessage | DataContentMessage | ErrorMessage,
@@ -265,120 +258,59 @@ export abstract class HandlerBase {
     this.sendMessage(ws, message);
   }
 
-  /**
-   * Generic function to create a status message.
-   * @param code - status code (http-based).
-   * @param statusMessage - A descriptive message.
-   * @param requestId - The ID of the corresponding request.
-   * @returns - A status message.
-   */
   protected createStatusMessage(
     code: number,
     statusMessage: string,
     requestId: string,
   ): StatusMessage {
-    return {
-      type: "status",
-      code: code,
-      message: statusMessage,
-      requestId: requestId,
-      timestamp: getCurrentTimestamp(),
-    };
+    return createStatusMessage(code, statusMessage, requestId);
   }
 
-  /**
-   * Generic function to create an error message.
-   * @param code - status code (http-based).
-   * @param message - A short message.
-   * @param reason - A descriptive reason for the error.
-   * @param requestId - The ID of the corresponding request.
-   * @returns - A error message.
-   */
   protected createErrorMessage(
     code: number,
     message: string,
     reason: string,
     requestId: string,
   ): ErrorMessage {
-    return {
-      type: "error",
-      code: code,
-      message: message,
-      reason: reason,
-      requestId: requestId,
-    };
+    return createErrorMessage(code, message, reason, requestId);
   }
 
-  /**
-   * Generic function to create a data content message.
-   * @param instance - The ID of the element in the tree.
-   * @param dataPoints - the data points with values.
-   * @param root - "absolute" or "relative" paths.
-   * @param format - "nested" or "flat" data structure.
-   * @param path - The path associated with the data points.
-   * @param metadata - available metadata for the data points
-   * @param requestId - The ID of the corresponding request.
-   * @returns - A data content message.
-   */
   protected createDataContentMessage(
     instance: string,
-    dataPoints: Array<{ name: string; value: any }>,
+    dataPoints: Array<{ name: string; value: unknown }>,
     root: "absolute" | "relative",
     format: "nested" | "flat",
     path: string,
-    metadata?: Array<{ name: string; value: any }>,
+    metadata?: Array<{ name: string; value: unknown }>,
     requestId?: string,
   ): DataContentMessage {
-    // Ensure nodes are valid
-    if (dataPoints.length === 0) {
-      throw new Error("Nodes array cannot be empty.");
-    }
-
-    // Process root first: determine the base path for each datapoint
-    // Then process format: structure the output as flat or nested
-    const schema = getSchemaOrThrow(dataPoints);
-    const requestedPath = normalizeRequestedPath(
-      replaceUnderscoresWithDots(path),
-      schema,
+    return createDataContentMessage(
+      instance,
+      dataPoints,
+      root,
+      format,
+      path,
+      metadata,
+      requestId,
     );
-
-    return {
-      type: "data",
-      instance: instance,
-      schema: schema,
-      data:
-        format === "nested"
-          ? buildDataStructureAsTree(dataPoints, root, requestedPath, schema)
-          : buildDataStructureFlat(dataPoints, root, requestedPath, schema),
-      requestId: requestId,
-      ...(metadata &&
-        Object.keys(metadata).length && {
-          metadata: buildDataStructureFlat(
-            metadata,
-            root,
-            requestedPath,
-            schema,
-          ),
-        }),
-    };
   }
 
   protected extractNodesFromData(
     path: string,
-    data: Record<string, any>,
-  ): Record<string, any> {
-    const result: Record<string, any> = {};
+    data: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
 
     function traverse(
       currentPath: string,
-      currentData: Record<string, any>,
+      currentData: Record<string, unknown>,
     ): void {
       for (const [key, value] of Object.entries(currentData)) {
         const fullPath = `${currentPath}.${key}`;
         if (typeof value === "object" && value !== null) {
-          traverse(fullPath, value); // Recursive call for nested objects
+          traverse(fullPath, value as Record<string, unknown>);
         } else {
-          result[fullPath] = value; // Add leaf node to the result
+          result[fullPath] = value;
         }
       }
     }
@@ -387,71 +319,9 @@ export abstract class HandlerBase {
     return result;
   }
 
-  /**
-   * Reads and parses a data points file in either JSON, YML, or YAML format.
-   */
-  private readDataPointsFile(filePath: string): object {
-    const fileContent = fs.readFileSync(filePath, "utf8");
-    const filePathLower = filePath.toLowerCase();
-    if (filePathLower.endsWith(".json")) {
-      return JSON.parse(fileContent);
-    } else if (
-      filePathLower.endsWith(".yaml") ||
-      filePathLower.endsWith(".yml")
-    ) {
-      const result = yaml.load(fileContent);
-      if (typeof result === "object" && result !== null) {
-        return result;
-      } else {
-        throw new Error("YAML content is not a valid object");
-      }
-    } else {
-      throw new Error("Unsupported data points file format");
-    }
-  }
-
-  /**
-   * Extracts data types from a data point object.
-   */
-  private extractDataTypes(
-    dataPointsObj: any,
-    parentKey = "",
-    result: { [key: string]: any } = {},
-  ): { [key: string]: any } {
-    for (const key in dataPointsObj) {
-      if (dataPointsObj.hasOwnProperty(key)) {
-        const value = dataPointsObj[key];
-        const newKey = parentKey ? `${parentKey}.${key}` : key;
-        const isObject = value && typeof value === "object";
-        if (isObject && value.datatype) {
-          result[newKey] = value.datatype;
-        } else if (isObject) {
-          this.extractDataTypes(value.children || value, newKey, result);
-        }
-      }
-    }
-    return result;
-  }
-
-  /**
-   * Retrieves and processes supported data points.
-   * This method reads the data points configuration file, extracts the data types,
-   * and transforms the data point names to use underscores. It returns an object
-   * with the transformed data point names as keys and their corresponding data types.
-   * @returns An object containing the supported data points with transformed names and data types.
-   */
   protected getSupportedDataPoints(): object {
     const dataPointPath = getDataPointsPath();
-    const dataPointObj = this.readDataPointsFile(dataPointPath);
-    const supportedDataPoints = this.extractDataTypes(dataPointObj);
-    const result: { [key: string]: any } = {};
-    Object.entries(supportedDataPoints).forEach(([node, value]) => {
-      const underscored_node = replaceDotsWithUnderscore(node);
-      if (value !== null) {
-        result[underscored_node] = value;
-      }
-    });
-    return result;
+    return loadDataPointSchema(dataPointPath);
   }
 
   /**
@@ -465,7 +335,6 @@ export abstract class HandlerBase {
     message: NewMessage,
     dataPointsSchema: DataPointSchema,
   ): string | null {
-    // build the nodes from path and data
     if (message.type == NewMessageType.PermissionsEdit) {
       return null;
     }
@@ -473,7 +342,7 @@ export abstract class HandlerBase {
     const requestNodes = extractLeafNodesFromRequest(message.path, data);
 
     const unknownFields = Array.from(requestNodes).filter((node) => {
-      return !dataPointsSchema.hasOwnProperty(node);
+      return !Object.prototype.hasOwnProperty.call(dataPointsSchema, node);
     });
 
     if (unknownFields.length > 0) {
@@ -487,17 +356,15 @@ export abstract class HandlerBase {
 
   protected extractNodesFromMessage(
     message: SetMessageType,
-  ): Record<string, any> {
-    const result: Record<string, any> = {};
+  ): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
 
     if (typeof message.data === "object" && message.data !== null) {
-      // Case: data is a nested object or key-value structure
       const nodes = this.extractNodesFromData(message.path, message.data);
       for (const [key, value] of Object.entries(nodes)) {
         result[replaceDotsWithUnderscore(key)] = value;
       }
     } else {
-      // Case: data is a single value
       result[replaceDotsWithUnderscore(message.path)] = message.data;
     }
 
@@ -506,201 +373,18 @@ export abstract class HandlerBase {
 
   protected extractNodesFromMessageWithVinAsNode(
     message: SetMessageType,
-  ): Record<string, any> {
+  ): Record<string, unknown> {
     const result = this.extractNodesFromMessage(message);
-    // Add VIN as Node
     const { dataPointId } = databaseParams["VSS"];
     result[dataPointId] = message.instance;
     return result;
   }
 }
 
-function extractLeafNodesFromRequest(path: string, data?: any): Set<string> {
-  const leafNodes = new Set<string>();
-
-  if (data && typeof data === "object") {
-    for (const [key, value] of Object.entries(data)) {
-      const fullPath = `${path}.${key}`;
-      if (typeof value === "object" && value !== null) {
-        // Recursive call for nested objects
-        const childLeafNodes = extractLeafNodesFromRequest(fullPath, value);
-        for (const child of childLeafNodes) {
-          leafNodes.add(child); // Add all child leaf nodes
-        }
-      } else {
-        // If it's not an object, it's a leaf node
-        leafNodes.add(fullPath);
-      }
-    }
-  } else {
-    // If data is not an object, the base path itself is a leaf node
-    leafNodes.add(path);
-  }
-
-  return new Set<string>(
-    Array.from(leafNodes, (value) => replaceDotsWithUnderscore(value)),
-  );
-}
-
-/**
- * Return the schema that is always the prefix (until the first dot) of all node names.
- * Throw in case of error
- * @param nodes list of nodes with names and values
- */
-function getSchemaOrThrow(nodes: Array<{ name: string; value: any }>) {
-  return (
-    nodes[0]?.name.split(".")[0] ??
-    (() => {
-      throw new Error("Nodes array is empty");
-    })()
-  );
-}
-
-/**
- * Build flat data structure.
- * Process root first: determine base path relative to requested path.
- * Then format as flat: single-level key-value pairs.
- */
-function buildDataStructureFlat(
-  nodes: Array<{ name: string; value: any }>,
-  root: "absolute" | "relative",
-  requestedPath: string,
-  schema: string,
-): Record<string, any> {
-  return nodes.reduce(
-    (accumulator, { name, value }) => {
-      let processedName: string;
-
-      if (root === "relative") {
-        // Remove everything up to and including the requested path
-        // E.g., "Vehicle.CurrentLocation.Latitude" with path "CurrentLocation" -> "Latitude"
-        // E.g., "Vehicle.Speed" with path "" -> "Speed"
-        const fullPath = requestedPath ? `${schema}.${requestedPath}` : schema;
-        if (name.startsWith(fullPath + ".")) {
-          processedName = name.substring(fullPath.length + 1);
-        } else if (name === fullPath) {
-          processedName = ""; // Exact match - use empty string
-        } else if (name.startsWith(schema + ".")) {
-          // Fall back to removing the schema prefix
-          processedName = name.substring(schema.length + 1);
-        } else {
-          processedName = name;
-        }
-      } else {
-        // Absolute: keep full path excluding only the schema prefix
-        // E.g., "Vehicle.CurrentLocation.Latitude" -> "CurrentLocation.Latitude"
-        processedName = name.includes(".")
-          ? name.split(".").slice(1).join(".")
-          : name;
-      }
-
-      accumulator[processedName] = value;
-      return accumulator;
-    },
-    {} as Record<string, any>,
-  );
-}
-
-/**
- * Build nested data structure.
- * Process root first: determine base path relative to requested path.
- * Then format as nested: hierarchical object structure.
- */
-function buildDataStructureAsTree(
-  nodes: Array<{ name: string; value: any }>,
-  root: "absolute" | "relative",
-  requestedPath: string,
-  schema: string,
-): any {
-  // First, process each node name based on root setting
-  const processedNodes = nodes.map(({ name, value }) => {
-    let processedName: string;
-
-    if (root === "relative") {
-      // Remove everything up to and including the requested path
-      const fullPath = requestedPath ? `${schema}.${requestedPath}` : schema;
-      if (name.startsWith(fullPath + ".")) {
-        processedName = name.substring(fullPath.length + 1);
-      } else if (name === fullPath) {
-        processedName = ""; // Exact match - return value directly
-      } else if (name.startsWith(schema + ".")) {
-        // Fall back to removing the schema prefix
-        processedName = name.substring(schema.length + 1);
-      } else {
-        processedName = name;
-      }
-    } else {
-      // Absolute: keep full path excluding only the schema prefix
-      processedName = name.includes(".")
-        ? name.split(".").slice(1).join(".")
-        : name;
-    }
-
-    return { name: processedName, value };
-  });
-
-  // Special case: if there's only one node with empty name, return the value directly
-  if (processedNodes.length === 1 && processedNodes[0].name === "") {
-    return processedNodes[0].value;
-  }
-
-  // Build nested structure from processed names
-  const data: any = {};
-
-  for (const { name, value } of processedNodes) {
-    if (name === "") {
-      // Empty path - this shouldn't happen in nested format with multiple nodes
-      continue;
-    }
-
-    const pathParts = name.split(".");
-    let currentLevel = data;
-
-    for (let j = 0; j < pathParts.length; j++) {
-      const key = pathParts[j];
-      if (j === pathParts.length - 1) {
-        // Leaf node
-        currentLevel[key] = value;
-      } else {
-        // Intermediate node
-        if (!currentLevel[key]) {
-          currentLevel[key] = {};
-        }
-        currentLevel = currentLevel[key];
-      }
-    }
-  }
-
-  return data;
-}
-
-function normalizeRequestedPath(path: string, schema: string): string {
-  if (!path) {
-    return "";
-  }
-
-  if (path === schema) {
-    return "";
-  }
-
-  if (path.startsWith(schema + ".")) {
-    return path.substring(schema.length + 1);
-  }
-
-  return path;
-}
-
-function getCurrentTimestamp(): { seconds: number; nanos: number } {
-  const now = new Date();
-  const seconds = Math.floor(now.getTime() / 1000); // Convert milliseconds to seconds
-  const nanos = (now.getTime() % 1000) * 1e6; // Remainder in milliseconds converted to nanoseconds
-  return { seconds, nanos: nanos };
-}
-
 export type QueryResult =
   | {
       success: true;
-      dataPoints: Array<{ name: string; value: any }>;
-      metadata: Array<{ name: string; value: any }>;
+      dataPoints: Array<{ name: string; value: unknown }>;
+      metadata: Array<{ name: string; value: unknown }>;
     }
   | { success: false; error: string };

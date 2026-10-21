@@ -24,15 +24,15 @@ export default tseslint.config(
     },
     rules: {
       "max-depth": ["error", 3],
-      "@/no-console": "error",
+      "no-console": "error",
       "@typescript-eslint/no-unnecessary-condition": "error",
       "@typescript-eslint/no-floating-promises": "error",
       "no-shadow": "off",
       "@typescript-eslint/no-shadow": "error",
       "@typescript-eslint/naming-convention": "error",
-      "@no-nested-ternary": "warn",
+      "no-nested-ternary": "warn",
       "prettier/prettier": "error",
       ...prettierConfig.rules,
     },
-  }
+  },
 );

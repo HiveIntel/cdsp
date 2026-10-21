@@ -1,0 +1,67 @@
+@prefix car:  <http://example.ontology.com/car#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+
+# ── Rule 1: Identify the most recent observation per property as CurrentObservation ──
+#
+# For each observedProperty, finds the observation with the latest phenomenonTime
+# and marks it as car:CurrentObservation. This feeds Rule 5.
+
+car:RuleCurrentObservation a sh:NodeShape ;
+    sh:targetClass sosa:Observation ;
+    sh:rule [
+        a sh:SPARQLRule ;
+        sh:order 1 ;
+        sh:construct """
+            PREFIX car:  <http://example.ontology.com/car#>
+            PREFIX sosa: <http://www.w3.org/ns/sosa/>
+            CONSTRUCT {
+                ?obs1 a car:CurrentObservation .
+            } WHERE {
+                {
+                    SELECT ?op (MAX(?pt) AS ?max_pt) WHERE {
+                        ?obs  a sosa:Observation ;
+                              sosa:observedProperty ?op ;
+                              sosa:phenomenonTime   ?pt .
+                    } GROUP BY ?op
+                }
+                ?obs1 a sosa:Observation ;
+                      sosa:observedProperty ?op ;
+                      sosa:phenomenonTime   ?max_pt .
+            }
+        """
+    ] .
+
+# ── Rule 5: Identify HighSpeedObservation (speed > 10) ───────────────────────
+#
+# Depends on Rule 1: only considers car:CurrentObservation instances.
+# Creates a car:HighSpeedObservation with speed value and trimmed datetime.
+
+car:RuleHighSpeedObservation a sh:NodeShape ;
+    sh:targetClass sosa:Observation ;
+    sh:rule [
+        a sh:SPARQLRule ;
+        sh:order 5 ;
+        sh:construct """
+            PREFIX car:  <http://example.ontology.com/car#>
+            PREFIX sosa: <http://www.w3.org/ns/sosa/>
+            PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+            CONSTRUCT {
+                ?hs a car:HighSpeedObservation ;
+                    car:hasObservation       ?obs ;
+                    car:hasSpeed             ?speed_value ;
+                    car:hasObservationDatetime ?pt_trimmed .
+            } WHERE {
+                ?obs a car:CurrentObservation ;
+                     sosa:observedProperty car:speed ;
+                     sosa:hasSimpleResult  ?speed_value ;
+                     sosa:phenomenonTime   ?pt .
+
+                BIND(SUBSTR(STR(?pt), 1, 19) AS ?pt_trimmed)
+                FILTER(xsd:float(?speed_value) > 10)
+
+                BIND(IRI(CONCAT("http://example.ontology.com/car#HighSpeedObservation_", STR(?obs))) AS ?hs)
+            }
+        """
+    ] .

@@ -4,92 +4,118 @@ This project contains one handler configured to be used with IoTDB.
 
 ## Adding a New Database Handler
 
-This project uses a handler interface to dynamically integrate new database backends such as IoTDB, RealmDB and other DB solutions. Each handler must implement necessary methods and core functionalities to handle WebSocket messages (get, set, subscribe, unsubscribe).
+This project uses a handler interface to dynamically integrate new database backends such as IoTDB, RealmDB, and other DB solutions. Each handler must implement the necessary methods and core
+functionality to handle WebSocket messages (`get`, `set`, `subscribe`, `unsubscribe`).
 
 ### How to Add a New Database Handler
 
-1. **Create a new handler class**: 
-    Create a new file for your database handler (e.g., `mydb-handler.ts`) in the `./mydb/src` directory. This handler should extend the base class from [HandlerBase.js](./HandlerBase.ts).
-2. **Implement the handler methods**: 
-    You must implement the following methods in your new handler:
+1. **Create a new handler class**
+   Create a new file for your database handler (e.g., `mydb-handler.ts`) in the `./mydb/src` directory. This handler should extend the base class from [HandlerBase.ts](./HandlerBase.ts).
+
+2. **Implement the handler methods**
+   You must implement the following methods in your new handler:
+
    - `authenticateAndConnect()`: Establish a connection with the database and authenticate.
-   - `getKnownDatapointsByPrefix(prefix)`: Return a list of all known data point names that begin with the specified prefix.
-   - `getDataPointsFromDB(dataPoints, vin)`: Return the dataPoints from DB based on the provided list of dataPoints and VIN.
+   - `getKnownDatapointsByPrefix(prefix)`: Return all known datapoint names that begin with the specified prefix.
+   - `getDataPointsFromDB(dataPoints, vin)`: Return datapoints from DB based on requested datapoints and VIN.
    - `set(message, ws)`: Write data to the database.
-   - `subscribe(message, ws)`: Subscribe to changes in the database, and automatically send updates over WebSocket.
+   - `subscribe(message, ws)`: Subscribe to database changes and send updates over WebSocket.
    - `unsubscribe(message, ws)`: Unsubscribe from database updates.
-   - `unsubscribe_client(ws)`: Unsubscribing the client itself on a closed connection.
+   - `unsubscribeClient(ws)`: Unsubscribe/cleanup client resources on closed connection.
 
-3. **Example Handler Implementation**:
-   Here’s a basic template you can follow:
-```js
-const Handler = require('../../handler');
+3. **Example handler implementation**
 
-export class MyDBHandler extends Handler {
+```ts
+import { HandlerBase } from "../HandlerBase";
+import { WebSocketWithId } from "../../utils/database-params";
+import {
+  GetMessageType,
+  SetMessageType,
+  SubscribeMessageType,
+  UnsubscribeMessageType,
+} from "../../router/utils/NewMessage";
 
-async authenticateAndConnect() {
+export class MyDBHandler extends HandlerBase {
+  async authenticateAndConnect() {
     // Connect to your database here
-}
+  }
 
-getKnownDatapointsByPrefix(datapointPrefix) {
-    // Return a list of all known data point names that begin with the specified prefix
-}
+  getKnownDatapointsByPrefix(datapointPrefix: string): string[] {
+    // Return a list of known datapoints by prefix
+    return [];
+  }
 
-async getDataPointsFromDB(dataPoints, vin) {
-    // Return the dataPoints from DB based on the provided list of dataPoints and VIN
-}
+  async getDataPointsFromDB(dataPoints: string[], vin: string) {
+    // Return datapoints + metadata in QueryResult shape
+    return { success: true, dataPoints: [], metadata: [] };
+  }
 
-async set(message, ws) {
-    // Implement the logic to write data to the database
-}
+  protected async get(
+    message: GetMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    // Implement get flow
+  }
 
-async subscribe(message, ws) {
-    // Implement the logic to subscribe to updates from the database
-}
+  protected async set(
+    message: SetMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    // Implement set flow
+  }
 
-async unsubscribe(message, ws) {
-    // Implement the logic to unsubscribe from updates
-}
+  protected async subscribe(
+    message: SubscribeMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    // Implement subscribe flow
+  }
+
+  protected async unsubscribe(
+    message: UnsubscribeMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    // Implement unsubscribe flow
+  }
 }
 ```
 
-4. **Create configuration files**: 
-    Create the configuration files into `./mydb/config` to include parameters for your new database (e.g., database names, data schemas, etc.).
-> [!IMPORTANT]     
-> Ensure to create the necessary files to support the necessary data points that will be store in the DB and required for your clients. See [how](../config/README.md).
+4. **Create configuration files**
+   Create configuration files under ./mydb/config to include parameters for your new database (e.g., database names, data schemas, etc.).
 
-5. **Work with the Handler**: 
+   > [!IMPORTANT]
+   > Ensure you create the necessary files to support all datapoints required by your clients. See how.
 
-    Create (if it does not exist) `/docker/.env` and add the following environment variables, replacing the values with yours:
+5. **Work with the handler**:
+
+Create (if it does not exist) `/docker/.env` and add:
 
 ```sh
 #########################
 # GENERAL CONFIGURATION #
 #########################
 
-# HANDLER_TYPE define the database to initialize
 HANDLER_TYPE=mydb
-# DATA_POINTS_SCHEMA_FILE is the YAML or JSON file containing all data points supported. See the ../../config/README.md for more information.
 DATA_POINTS_SCHEMA_FILE=vss_data_points.yaml
+
 #########################
-# MYDB CONFIGURATION #
+# MYDB CONFIGURATION    #
 #########################
 
-# Other variables are optional, they will not be committed. You can define custom variables like API Keys or secrets.
 OPTIONAL_CUSTOM_VARIABLES="value"
 ```
 
-> [!WARNING] 
+> [!WARNING]
 > Do not commit this file to GitHub!
 
-In order to work with your custom database handler, it is required to create it in the [HandlerCreator.ts](./HandlerCreator.ts). 
+To use your custom handler, register it in [HandlerCreator.ts](./HandlerCreator.ts):
 
 ```ts
 switch (handlerType) {
   case "iotdb":
     handler = new IoTDBHandler();
     break;
-  // define the new MyDBhandler object.
+  // define the new MyDBHandler object.
   case "mydb":
     handler = new MyDBHandler();
     break;
@@ -98,11 +124,14 @@ switch (handlerType) {
 }
 ```
 
-Run the WebSocket server, and connect with your handler by sending WebSocket messages to test reading, writing, and subscribing functionalities. The handler should be started by the DB-Router like described [here](../../README.md).
+Run the WebSocket server and test read/write/subscribe flows. The handler is started by the DB-Router as described here.
 
-### Existing Handlers
+### Existing handlers
 
-You can check the following examples to understand how to structure your new handler:
-- **IoTDB Handler**: provides an example implementation with IotDB. [IoTDBHandler](./iotdb/src/IoTDBHandler.ts).
+- **IoTDB Handler**: example implementation for IoTDB. [IoTDBHandler](./iotdb/src/IoTDBHandler.ts).
 
-For additional logging, you can utilize the `logMessage` function from [logger.ts](../../utils/logger.ts).
+### IoTDB note (current state)
+
+The IoTDB runtime path uses the Node.js native client (@iotdb/client) and shared session lifecycle. Legacy Thrift runtime code path has been removed.
+
+For additional logging, use `logMessage` from [logger.ts](../../utils/logger.ts).

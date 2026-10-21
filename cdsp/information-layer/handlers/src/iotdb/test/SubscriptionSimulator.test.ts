@@ -1,6 +1,5 @@
 import { SubscriptionSimulator } from "../src/SubscriptionSimulator";
 import { WebSocketWithId } from "../../../../utils/database-params";
-import { Session } from "../src/Session";
 import {
   DataContentMessage,
   ErrorMessage,
@@ -8,6 +7,7 @@ import {
   SubscribeMessageType,
   UnsubscribeMessageType,
 } from "../../../../router/utils/NewMessage";
+import { IoTDBSession } from "../src/IoTDBSession";
 
 jest.mock("../config/database-params", () => ({
   ...jest.requireActual("../config/database-params"),
@@ -22,14 +22,6 @@ jest.mock("../config/database-params", () => ({
   },
 }));
 
-jest.mock("thrift", () => ({
-  createConnection: jest.fn(() => ({
-    on: jest.fn(),
-    end: jest.fn(),
-    destroy: jest.fn(),
-  })),
-}));
-
 // Mock the module where transformSessionDataSet is defined
 jest.mock("../utils/database-helper", () => ({
   transformSessionDataSet: jest.fn(), // Ensure transformSessionDataSet is a mock function
@@ -37,18 +29,15 @@ jest.mock("../utils/database-helper", () => ({
 
 describe("SubscriptionSimulator", () => {
   let simulator: SubscriptionSimulator;
-  let mockSession: Session;
   let mockWebSocket: WebSocketWithId;
   let mockSubscribeMessageVIN1: SubscribeMessageType;
   let mockSubscribeMessageVIN2: SubscribeMessageType;
   let mockUnsubscribeMessageVIN1: UnsubscribeMessageType;
-  let mockUnsubscribeMessageVIN2: UnsubscribeMessageType;
   let sendMessageToClientMock: jest.Mock;
   let sendAlreadySubscribedErrorMsg: jest.Mock;
+  let mockNewSession: jest.Mocked<IoTDBSession>;
 
   beforeEach(() => {
-    mockSession = new Session();
-
     const createStatusMessageMock = jest.fn<
       StatusMessage, // Return type
       [number, string, string] // Parameters: code, message, requestId
@@ -71,9 +60,26 @@ describe("SubscriptionSimulator", () => {
       requestId: requestId,
     }));
 
+    mockNewSession = {
+      open: jest.fn().mockResolvedValue(undefined),
+      close: jest.fn().mockResolvedValue(undefined),
+      isOpen: jest.fn().mockReturnValue(true),
+      getDataPoints: jest.fn(),
+      getDataPointsInWindow: jest.fn().mockResolvedValue({
+        success: true,
+        dataPoints: [],
+        metadata: [],
+      }),
+      setDataPoints: jest.fn(),
+      createDatabaseIfNeeded: jest.fn().mockResolvedValue(undefined),
+      subscribeDataPoints: jest.fn(),
+      unsubscribeDataPoints: jest.fn(),
+    } as unknown as jest.Mocked<IoTDBSession>;
+
     sendAlreadySubscribedErrorMsg = jest.fn();
     sendMessageToClientMock = jest.fn();
     simulator = new SubscriptionSimulator(
+      mockNewSession,
       sendMessageToClientMock,
       jest.fn(),
       createStatusMessageMock,
@@ -105,11 +111,6 @@ describe("SubscriptionSimulator", () => {
       requestId: "requestId3",
     } as UnsubscribeMessageType;
 
-    mockUnsubscribeMessageVIN2 = {
-      instance: "VIN_2",
-      requestId: "requestId4",
-    } as UnsubscribeMessageType;
-
     const subscription = {
       vin: "VIN_1",
       dataPoints: new Set<string>(["datapoint1", "datapoint2"]),
@@ -134,7 +135,7 @@ describe("SubscriptionSimulator", () => {
 
   describe("subscribe", () => {
     test("does not send already-subscribed error on first subscribe", () => {
-      simulator.subscribe(mockSubscribeMessageVIN1, mockWebSocket, [
+      void simulator.subscribe(mockSubscribeMessageVIN1, mockWebSocket, [
         "datapoint1",
       ]);
 
@@ -142,22 +143,21 @@ describe("SubscriptionSimulator", () => {
     });
 
     test("creates a new subscription if client is not subscribed to provided VIN", () => {
-      simulator.subscribe(mockSubscribeMessageVIN2, mockWebSocket, [
+      void simulator.subscribe(mockSubscribeMessageVIN2, mockWebSocket, [
         "datapoint1",
         "datapoint2",
       ]);
 
       expect(simulator["websocketToSubscriptionsMap"].size).toBe(1);
+      const subscriptions =
+        simulator["websocketToSubscriptionsMap"].get(mockWebSocket);
+      expect(subscriptions).toBeDefined();
+      expect(subscriptions?.length).toBe(2);
       expect(
-        simulator["websocketToSubscriptionsMap"].get(mockWebSocket)!.length,
-      ).toBe(2);
-      expect(
-        simulator["websocketToSubscriptionsMap"]
-          .get(mockWebSocket)!
-          .find(
-            (subscription) =>
-              subscription.vin === mockSubscribeMessageVIN2.instance,
-          )?.dataPoints.size,
+        subscriptions?.find(
+          (subscription) =>
+            subscription.vin === mockSubscribeMessageVIN2.instance,
+        )?.dataPoints.size,
       ).toBe(2);
     });
 
@@ -172,10 +172,15 @@ describe("SubscriptionSimulator", () => {
       } as SubscribeMessageType;
 
       // Subscribe with the replacement message
-      simulator.subscribe(replacementMessage, mockWebSocket, ["datapointNew"]);
+      void simulator.subscribe(replacementMessage, mockWebSocket, [
+        "datapointNew",
+      ]);
 
       const subscriptions =
-        simulator["websocketToSubscriptionsMap"].get(mockWebSocket)!;
+        simulator["websocketToSubscriptionsMap"].get(mockWebSocket);
+      if (!subscriptions) {
+        throw new Error("Subscriptions should be defined");
+      }
       const replaced = subscriptions.find(
         (sub) => sub.requestId === "requestId1",
       );
@@ -190,29 +195,28 @@ describe("SubscriptionSimulator", () => {
     });
 
     test("updates subscription datapoints when requestId matches", () => {
-      simulator.subscribe(mockSubscribeMessageVIN1, mockWebSocket, [
+      void simulator.subscribe(mockSubscribeMessageVIN1, mockWebSocket, [
         "datapointNew",
         "datapoint2",
       ]);
 
       expect(simulator["websocketToSubscriptionsMap"].size).toBe(1);
+      const subscriptions =
+        simulator["websocketToSubscriptionsMap"].get(mockWebSocket);
+      expect(subscriptions).toBeDefined();
+      expect(subscriptions?.length).toBe(1);
       expect(
-        simulator["websocketToSubscriptionsMap"].get(mockWebSocket)!.length,
-      ).toBe(1);
-      expect(
-        simulator["websocketToSubscriptionsMap"]
-          .get(mockWebSocket)!
-          .find(
-            (subscription) =>
-              subscription.vin === mockSubscribeMessageVIN1.instance,
-          )?.dataPoints.size,
+        subscriptions?.find(
+          (subscription) =>
+            subscription.vin === mockSubscribeMessageVIN1.instance,
+        )?.dataPoints.size,
       ).toBe(2);
     });
 
     test("starts a periodic database listener if no intervalId is set", () => {
       simulator["intervalId"] = null;
 
-      simulator.subscribe(mockSubscribeMessageVIN2, mockWebSocket, [
+      void simulator.subscribe(mockSubscribeMessageVIN2, mockWebSocket, [
         "datapoint1",
         "datapoint2",
       ]);
@@ -224,7 +228,10 @@ describe("SubscriptionSimulator", () => {
   describe("unsubscribe", () => {
     test("remove subscription with exact matching datapoints", () => {
       const subscriptions =
-        simulator["websocketToSubscriptionsMap"].get(mockWebSocket)!;
+        simulator["websocketToSubscriptionsMap"].get(mockWebSocket);
+      if (!subscriptions) {
+        throw new Error("Subscriptions should be defined");
+      }
       subscriptions.push({
         vin: "VIN_1",
         dataPoints: new Set<string>(["datapoint3", "datapoint4"]),
@@ -241,24 +248,24 @@ describe("SubscriptionSimulator", () => {
       ]);
 
       expect(simulator["websocketToSubscriptionsMap"].size).toBe(1);
+      const remainingSubscriptions =
+        simulator["websocketToSubscriptionsMap"].get(mockWebSocket);
+      expect(remainingSubscriptions).toBeDefined();
+      expect(remainingSubscriptions?.length).toBe(1);
       expect(
-        simulator["websocketToSubscriptionsMap"].get(mockWebSocket)!.length,
-      ).toBe(1);
-      expect(
-        simulator["websocketToSubscriptionsMap"]
-          .get(mockWebSocket)!
-          .find((sub) => sub.requestId === "requestId2"),
+        remainingSubscriptions?.find((sub) => sub.requestId === "requestId2"),
       ).toBeDefined();
       expect(
-        simulator["websocketToSubscriptionsMap"]
-          .get(mockWebSocket)!
-          .find((sub) => sub.requestId === "requestId1"),
+        remainingSubscriptions?.find((sub) => sub.requestId === "requestId1"),
       ).toBeUndefined();
     });
 
     test("remove multiple subscriptions if they have exact matching datapoints", () => {
       const subscriptions =
-        simulator["websocketToSubscriptionsMap"].get(mockWebSocket)!;
+        simulator["websocketToSubscriptionsMap"].get(mockWebSocket);
+      if (!subscriptions) {
+        throw new Error("Subscriptions should be defined");
+      }
       subscriptions.push({
         vin: "VIN_1",
         dataPoints: new Set<string>(["datapoint1", "datapoint2"]),
@@ -315,7 +322,7 @@ describe("SubscriptionSimulator", () => {
     });
 
     test("stops the timer if there is no subscription left", () => {
-      simulator.subscribe(mockSubscribeMessageVIN1, mockWebSocket, [
+      void simulator.subscribe(mockSubscribeMessageVIN1, mockWebSocket, [
         "datapoint1",
         "datapoint2",
       ]);
@@ -330,7 +337,7 @@ describe("SubscriptionSimulator", () => {
     });
 
     test("does not stop timer if other subscriptions exist", () => {
-      simulator.subscribe(mockSubscribeMessageVIN2, mockWebSocket, [
+      void simulator.subscribe(mockSubscribeMessageVIN2, mockWebSocket, [
         "datapoint3",
       ]);
       const intervalId = simulator["intervalId"];
@@ -342,14 +349,13 @@ describe("SubscriptionSimulator", () => {
       ]);
 
       expect(simulator["intervalId"]).toBe(intervalId);
-      expect(
-        simulator["websocketToSubscriptionsMap"].get(mockWebSocket)!.length,
-      ).toBe(1);
-      expect(
-        simulator["websocketToSubscriptionsMap"]
-          .get(mockWebSocket)!
-          .find((sub) => sub.vin === "VIN_2"),
-      ).toBeDefined();
+      const subscriptions =
+        simulator["websocketToSubscriptionsMap"].get(mockWebSocket);
+      if (!subscriptions) {
+        throw new Error("Subscriptions should be defined");
+      }
+      expect(subscriptions.length).toBe(1);
+      expect(subscriptions.find((sub) => sub.vin === "VIN_2")).toBeDefined();
     });
 
     test("returns error when unsubscribing from non-existent VIN", () => {
@@ -406,15 +412,18 @@ describe("SubscriptionSimulator", () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       // Spy on `checkForChanges`
-      let timeIntervals: { lower: number; upper: number }[] = [];
+      const timeIntervals: { lower: number; upper: number }[] = [];
 
       (
         jest.spyOn(simulator as any, "checkForChanges") as jest.Mock
       ).mockImplementation((subscription: any, upperLimit: number) => {
-        timeIntervals.push({
-          lower: simulator["timeIntervalLowerLimit"]!, // Current lower limit
-          upper: upperLimit, // Passed upper limit
-        });
+        const lowerLimit = simulator["timeIntervalLowerLimit"];
+        if (lowerLimit !== undefined) {
+          timeIntervals.push({
+            lower: lowerLimit, // Current lower limit
+            upper: upperLimit, // Passed upper limit
+          });
+        }
         return Promise.resolve(undefined); // Simulate checkForChanges returning no updates
       });
 

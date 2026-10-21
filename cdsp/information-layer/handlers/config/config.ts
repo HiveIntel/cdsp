@@ -29,11 +29,12 @@ export const getHandlerType = (): string => {
  * @returns The value of the environment variable or null if not set.
  */
 export const getEnvValue = (envVar: string): string | null => {
-  if (!process.env[envVar]) {
+  const value = process.env[envVar];
+  if (!value) {
     logMessage(`${envVar} environment variable is not set in .env file.`);
     return null;
   }
-  return process.env[envVar]!;
+  return value;
 };
 
 /**

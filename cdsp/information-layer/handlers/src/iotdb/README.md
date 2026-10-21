@@ -1,49 +1,82 @@
 # IoTDB
 
-This directory contains the IoTDB Handler as a Node.js application. As [Apache IoTDB](https://iotdb.apache.org/) is a time-series database, the IoTDB Handler connects to an existing IoTDB instance using the Thrift protocol. The handler utilizes the [IoTDB Thrift API](https://github.com/apache/thrift) to communicate with the database and perform operations. Configuration details, such as the IoTDB host, port, user credentials, and time zone, are specified in the handler's configuration file. The IoTDB Handler is designed to manage sessions, execute queries, and interact with the IoTDB instance efficiently during runtime.
+This directory contains the IoTDB handler implementation for the Information Layer.
 
-# Features
+The handler now uses the **Node.js native IoTDB client** (`@iotdb/client`) as the only runtime path. Legacy Thrift-based runtime code has been removed.
 
-- **Authentication**: Authenticates with IoTDB using the IoTDB host, port, user credentials, number of rows to be fetched, and time zone.
-- **Get Data**: Retrieves data from the IoTDB using a VIN as object ID.
-- **Set Data**: Write data to the IoTDB using a VIN as object ID.
-- **Error Handling**: Logs and handles errors during database operations and synchronization.
+## Current Architecture
 
-# Configure IoTDB
+### `IoTDBHandler`
 
-Before the Database-Router can start the IoTDB Handler without any errors you need to start and run Docker containers defined in a [Docker Compose file](/docker/).
+- Main orchestrator for get/set/subscribe/unsubscribe requests.
+- Owns a single shared `IoTDBSession` instance.
+- Initializes schema and database readiness.
+- Delegates subscription lifecycle operations to `SubscriptionSimulator`.
 
-## Configure of a IoTDB Handler
+### `IoTDBSession`
 
-Create (if it does not exist) `/docker/.env` and add the following environment variables, replacing the values with yours.
+- Encapsulates IoTDB session lifecycle (`open`, `close`).
+- Executes query/write operations for:
+  - `getDataPoints`
+  - `getDataPointsInWindow` (polling window support)
+  - `setDataPoints`
+- Handles database creation via `createDatabaseIfNeeded`.
+- Uses explicit SQL dialect setup (`TREE`) when possible and logs fallback if unsupported.
+
+### `SubscriptionSimulator`
+
+- Manages in-memory websocket subscriptions.
+- Owns timer lifecycle (start/stop polling interval).
+- Uses the **shared** `IoTDBSession` injected by `IoTDBHandler` (does not own/close the session).
+- Polls IoTDB using time windows and sends updates to subscribed clients.
+
+## Subscription Model
+
+Node client support for native topic consumer APIs is limited for our target stack, so subscription behavior is currently implemented with polling:
+
+- periodic interval from config (`IOTDB_POLL_INTERVAL_LEN_IN_SEC`)
+- checks datapoint changes in `(previous_timestamp, current_timestamp]`
+- sends data messages only when changes are found
+- unsubscribe and unsubscribe-client cleanup stop polling when no subscriptions remain
+
+## Configuration
+
+Create `/docker/.env` (if missing) and configure:
 
 ```shell
-    #########################
-    # GENERAL CONFIGURATION #
-    #########################
-    
-    # HANDLER_TYPE define the database to initialize
-    HANDLER_TYPE=iotdb
-    # DATA_POINTS_SCHEMA_FILE is the YAML or JSON file containing all data points supported. See the ../../config/README.md for more information.
-    DATA_POINTS_SCHEMA_FILE=vss_data_points.yaml
-    
-    #######################
-    # IOTDB CONFIGURATION #
-    #######################
-    
-    # Access to iotdb-service. All these are optional, they have an predefine default value
-    IOTDB_HOST="your-iotdb-host" # Docker container name for IoTDB or host, default container name "iotdb-service"
-    IOTDB_PORT=6667 # Set this to the appropriate IotDB Port, default "6667"
-    IOTDB_USER="your-iotdb-user" # Default "root"
-    IOTDB_PASSWORD="your-iotdb-password" # Default "root"
-    IOTDB_TIMEZONE="your-time-zone" # Default your local configured time zone
-    IOTDB_FETCH_SIZE=10000 #number of rows that will be fetched from the database at a time when executing a query, default 10000
-    IOTDB_POLL_INTERVAL_LEN_IN_SEC=5 #number of seconds of interval to poll for changes on the IoTDB, default "0.2"
+#########################
+# GENERAL CONFIGURATION #
+#########################
+
+HANDLER_TYPE=iotdb
+DATA_POINTS_SCHEMA_FILE=vss_data_points.yaml
+
+#######################
+# IOTDB CONFIGURATION #
+#######################
+
+IOTDB_HOST="your-iotdb-host"
+IOTDB_PORT=6667
+IOTDB_USER="your-iotdb-user"
+IOTDB_PASSWORD="your-iotdb-password"
+IOTDB_TIMEZONE="your-time-zone"
+IOTDB_FETCH_SIZE=10000
+IOTDB_POLL_INTERVAL_LEN_IN_SEC=5
 ```
 
-> [!WARNING] 
-> Do not commit this file to GitHub!
+> [!WARNING]
+> Do not commit /docker/.env to GitHub.
 
-## Starting the IoTDB handler
+### Running
 
-You do not need to start IotDB Handler manually. It is started by the Websocket-Server like described [here](../../../README.md).
+The IoTDB handler is started by the Websocket-Server (see project root README).
+No manual standalone startup is required for normal project execution.
+
+### Validation
+
+Before merging changes in this area, run:
+
+```shell
+npm test
+npm run build
+```

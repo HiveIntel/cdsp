@@ -4,7 +4,7 @@
 # Dockerfile for the CDSP build of Apache IoTDB.
 # ---------------------------------------------------------------------------
 
-ARG IOTDB_VERSION=1.3.3
+ARG IOTDB_VERSION=2.0.8
 ARG IOTDB_IMAGE=apache/iotdb:${IOTDB_VERSION}-standalone
 
 FROM ${IOTDB_IMAGE} AS cdsp-extras

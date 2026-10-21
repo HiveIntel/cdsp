@@ -1,7 +1,11 @@
-import { logMessage, logError, logErrorStr } from "../../../../utils/logger";
-import { databaseConfig, databaseParams } from "../config/database-params";
-import { Session } from "./Session";
-import { SessionDataSet } from "../utils/SessionDataSet";
+import {
+  logMessage,
+  logError,
+  logErrorStr,
+  LogMessageType,
+} from "../../../../utils/logger";
+import { databaseConfig } from "../config/database-params";
+import { IoTDBSession } from "./IoTDBSession"; // Ensure IoTDBSession is included in the build
 import { WebSocketWithId } from "../../../../utils/database-params";
 import {
   DataContentMessage,
@@ -12,9 +16,7 @@ import {
   SubscribeMessageType,
   UnsubscribeMessageType,
 } from "../../../../router/utils/NewMessage";
-import { transformSessionDataSet } from "../utils/database-helper";
 import { toResponseFormat } from "../../../utils/transformations";
-import { METADATA_SUFFIX } from "../utils/iotdb-constants";
 
 export type Subscription = {
   vin: string;
@@ -26,24 +28,24 @@ export type Subscription = {
 };
 
 export type WebsocketToSubscriptionsMap = Map<WebSocketWithId, Subscription[]>;
-const TREE_VSS = "VSS";
 
 // Define the singleton instance at the module level
 let subscriptionSimulatorInstance: SubscriptionSimulator | null = null;
 
 // Function to get or initialize the singleton instance
 export function getSubscriptionSimulator(
+  session: IoTDBSession,
   sendMessageToClient: (
     ws: WebSocketWithId,
     message: StatusMessage | DataContentMessage | ErrorMessage,
   ) => void,
   createDataContentMessage: (
     instance: string,
-    dataPoints: Array<{ name: string; value: any }>,
+    dataPoints: Array<{ name: string; value: unknown }>,
     root: "absolute" | "relative",
     format: "nested" | "flat",
     path: string,
-    metadata?: Array<{ name: string; value: any }>, // FIXME: HandleBase contains optional metadata
+    metadata?: Array<{ name: string; value: unknown }>, // FIXME: HandleBase contains optional metadata
     requestId?: string,
   ) => DataContentMessage,
   createStatusMessage: (
@@ -66,20 +68,21 @@ export function getSubscriptionSimulator(
 ): SubscriptionSimulator {
   if (!subscriptionSimulatorInstance) {
     subscriptionSimulatorInstance = new SubscriptionSimulator(
+      session,
       sendMessageToClient,
       createDataContentMessage,
       createStatusMessage,
       createErrorMessage,
       sendAlreadySubscribedErrorMsg,
     );
-    logMessage("SubscriptionSimulator instance created.");
+    logMessage("SubscriptionSimulator instance created.", LogMessageType.INFO);
   }
   return subscriptionSimulatorInstance;
 }
 
 export class SubscriptionSimulator {
   private intervalId: NodeJS.Timeout | null = null;
-  private session: Session;
+  private session: IoTDBSession;
   private timeIntervalLowerLimit: number | undefined = undefined;
   private websocketToSubscriptionsMap: WebsocketToSubscriptionsMap = new Map();
   private readonly sendMessageToClient: (
@@ -88,11 +91,11 @@ export class SubscriptionSimulator {
   ) => void;
   private readonly createDataContentMessage: (
     instance: string,
-    dataPoints: Array<{ name: string; value: any }>,
+    dataPoints: Array<{ name: string; value: unknown }>,
     root: "absolute" | "relative",
     format: "nested" | "flat",
     path: string,
-    metadata?: Array<{ name: string; value: any }>, // FIXME: HandleBase contains optional metadata
+    metadata?: Array<{ name: string; value: unknown }>, // FIXME: HandleBase contains optional metadata
     requestId?: string,
   ) => DataContentMessage;
   private readonly createStatusMessage: (
@@ -114,17 +117,18 @@ export class SubscriptionSimulator {
   ) => void;
 
   constructor(
+    session: IoTDBSession,
     sendMessageToClient: (
       ws: WebSocketWithId,
       message: StatusMessage | DataContentMessage | ErrorMessage,
     ) => void,
     createDataContentMessage: (
       instance: string,
-      dataPoints: Array<{ name: string; value: any }>,
+      dataPoints: Array<{ name: string; value: unknown }>,
       root: "absolute" | "relative",
       format: "nested" | "flat",
       path: string,
-      metadata?: Array<{ name: string; value: any }>, // FIXME: HandleBase contains optional metadata
+      metadata?: Array<{ name: string; value: unknown }>, // FIXME: HandleBase contains optional metadata
       requestId?: string,
     ) => DataContentMessage,
     createStatusMessage: (
@@ -145,26 +149,30 @@ export class SubscriptionSimulator {
       requestId: string,
     ) => void,
   ) {
-    this.session = new Session();
+    this.session = session;
     this.notifyDatabaseChanges = this.notifyDatabaseChanges.bind(this);
     this.sendMessageToClient = sendMessageToClient;
     this.createDataContentMessage = createDataContentMessage;
     this.createStatusMessage = createStatusMessage;
     this.createErrorMessage = createErrorMessage;
     this.sendAlreadySubscribedErrorMsg = sendAlreadySubscribedErrorMsg;
-    void this.session.authenticateAndConnect();
 
     // Register the cleanup function
-    process.on("exit", this.cleanup.bind(this)); // Called when the process exits normally
+    process.on("exit", () => this.cleanup()); // Called when the process exits normally
     process.on("SIGINT", () => {
       this.cleanup();
       process.exit(0); // Ensure the process exits
     });
   }
 
-  private async cleanup(): Promise<void> {
+  private cleanup(): void {
     logMessage("Cleaning up SubscriptionSimulator...");
-    await this.session.closeSession(); // Replace with actual session close logic
+
+    if (this.intervalId !== null) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+    this.timeIntervalLowerLimit = undefined;
   }
 
   /**
@@ -239,19 +247,28 @@ export class SubscriptionSimulator {
       ),
     );
 
-    logMessage("subscribed");
+    logMessage(
+      "client id " +
+        wsOfNewSubscription.id +
+        " successfully subscribed to " +
+        message.instance,
+      LogMessageType.INFO,
+    );
     this.logSubscriptions();
   }
 
   private startSubscriptionListenerIfNeeded() {
-    if (this.intervalId === null) {
+    if (this.intervalId === null && databaseConfig) {
       this.intervalId = setInterval(
         this.notifyDatabaseChanges,
-        databaseConfig!.pollIntervalLenInSec * 1000,
+        databaseConfig.pollIntervalLenInSec * 1000,
       );
       this.intervalId.unref(); // Ensure timer doesn't keep the process alive
       this.timeIntervalLowerLimit = Date.now();
-      logMessage("started timer");
+      logMessage(
+        `started timer: interval=${databaseConfig.pollIntervalLenInSec}s, websockets=${this.websocketToSubscriptionsMap.size}, subscriptions=${Array.from(this.websocketToSubscriptionsMap.values()).reduce((n, subs) => n + subs.length, 0)}`,
+        LogMessageType.INFO,
+      );
     }
   }
 
@@ -356,7 +373,10 @@ export class SubscriptionSimulator {
   unsubscribeClient(ws: WebSocketWithId): void {
     this.websocketToSubscriptionsMap.delete(ws);
     this.removeTimerIfNoSubscription();
-    logMessage("unsubscribed client");
+    logMessage(
+      "client id " + ws.id + " unsubscribed from all subscriptions",
+      LogMessageType.INFO,
+    );
     this.logSubscriptions();
   }
 
@@ -371,7 +391,7 @@ export class SubscriptionSimulator {
       clearInterval(this.intervalId);
       this.intervalId = null;
       this.timeIntervalLowerLimit = undefined;
-      logMessage("stopped timer");
+      logMessage("stopped timer: no active subscriptions", LogMessageType.INFO);
     }
   }
 
@@ -391,7 +411,7 @@ export class SubscriptionSimulator {
           (logString += `  ${sub.vin} => [${Array.from(sub.dataPoints).join(", ")}] \n`),
       );
     }
-    logMessage(logString);
+    logMessage(logString, LogMessageType.INFO);
   }
 
   /**
@@ -417,7 +437,7 @@ export class SubscriptionSimulator {
     ] of this.websocketToSubscriptionsMap.entries()) {
       await Promise.all(
         subscriptions.map(async (subscription) => {
-          let dataContentMessage = await this.checkForChanges(
+          const dataContentMessage = await this.checkForChanges(
             subscription,
             timeIntervalUpperLimit,
           );
@@ -443,55 +463,37 @@ export class SubscriptionSimulator {
     subscription: Subscription,
     timeIntervalUpperLimit: number,
   ): Promise<DataContentMessage | undefined> {
-    const { databaseName, dataPointId } =
-      databaseParams[TREE_VSS as keyof typeof databaseParams];
-    const metadataPoints = [...subscription.dataPoints].map(
-      (dataPoint) => dataPoint + METADATA_SUFFIX,
-    );
-    const fieldsToSearch = [...subscription.dataPoints, ...metadataPoints].join(
-      ", ",
-    );
-    const sql = `SELECT ${fieldsToSearch}
-                 FROM ${databaseName}
-                 WHERE ${dataPointId} = '${subscription.vin}'
-                   AND Time
-                     > ${this.timeIntervalLowerLimit}
-                   AND Time <= ${timeIntervalUpperLimit}
-                 ORDER BY Time ASC`;
-
-    let dataContentMessage = undefined;
     try {
-      const sessionDataSet = await this.session.executeQueryStatement(sql);
+      const lower = this.timeIntervalLowerLimit;
+      if (lower === undefined) return undefined;
 
-      // Check if sessionDataSet is not an instance of SessionDataSet, and handle the error
-      if (!(sessionDataSet instanceof SessionDataSet)) {
-        throw new Error(
-          "Failed to retrieve session data. Invalid session dataset.",
-        );
-      }
-
-      const [data, metadata] = transformSessionDataSet(
-        sessionDataSet,
-        databaseName,
+      const result = await this.session.getDataPointsInWindow(
+        [...subscription.dataPoints],
+        subscription.vin,
+        lower,
+        timeIntervalUpperLimit,
       );
-      if (data.length > 0) {
-        dataContentMessage = this.createDataContentMessage(
-          subscription.vin,
-          data,
-          subscription.root,
-          subscription.format,
-          subscription.path,
-          metadata,
-          subscription.requestId,
-        );
-        logMessage(
-          `Processed ${data.length} changes for id ${subscription.vin}`,
-        );
+
+      if (!result.success || result.dataPoints.length === 0) {
+        return undefined;
       }
+
+      logMessage(
+        `Processed ${result.dataPoints.length} changes for id ${subscription.vin}`,
+      );
+
+      return this.createDataContentMessage(
+        subscription.vin,
+        result.dataPoints,
+        subscription.root,
+        subscription.format,
+        subscription.path,
+        result.metadata,
+        subscription.requestId,
+      );
     } catch (error: unknown) {
       logError("Unknown error", error);
-    } finally {
-      return dataContentMessage;
+      return undefined;
     }
   }
 }

@@ -1,14 +1,19 @@
-import {Session} from "./Session";
-import {getSubscriptionSimulator, SubscriptionSimulator} from "./SubscriptionSimulator";
-import {SupportedMessageDataTypes, METADATA_SUFFIX} from "../utils/iotdb-constants";
-import {HandlerBase, QueryResult} from "../../HandlerBase";
-import {SessionDataSet} from "../utils/SessionDataSet";
-import {IoTDBDataInterpreter} from "../utils/IoTDBDataInterpreter";
-import {createDataPointsSchema, isSupportedDataPoint, SupportedDataPoints,} from "../config/iotdb-config";
-import {databaseConfig, databaseParams} from "../config/database-params";
-import {COLORS, logErrorStr, logWithColor,} from "../../../../utils/logger";
-import {WebSocketWithId} from "../../../../utils/database-params";
-import {transformSessionDataSet} from "../utils/database-helper";
+import {
+  getSubscriptionSimulator,
+  SubscriptionSimulator,
+} from "./SubscriptionSimulator";
+import {
+  SupportedMessageDataTypes,
+  METADATA_SUFFIX,
+} from "../utils/iotdb-constants";
+import { HandlerBase, QueryResult } from "../../HandlerBase";
+import {
+  createDataPointsSchema,
+  SupportedDataPoints,
+} from "../config/iotdb-config";
+import { databaseConfig, databaseParams } from "../config/database-params";
+import { COLORS, logErrorStr, logWithColor } from "../../../../utils/logger";
+import { WebSocketWithId } from "../../../../utils/database-params";
 import {
   DataContentMessage,
   ErrorMessage,
@@ -18,86 +23,158 @@ import {
   STATUS_SUCCESS,
   StatusMessage,
   SubscribeMessageType,
-  UnsubscribeMessageType
+  UnsubscribeMessageType,
+  GetMessageType,
 } from "../../../../router/utils/NewMessage";
-import {removeSuffixFromString, replaceDotsWithUnderscore, replaceUnderscoresWithDots} from "../../../utils/transformations";
-
-import {TSInsertRecordReq} from "../gen-nodejs/client_types";
-
+import {
+  removeSuffixFromString,
+  replaceDotsWithUnderscore,
+  replaceUnderscoresWithDots,
+} from "../../../utils/transformations";
+import { IoTDBSession } from "./IoTDBSession";
+import { logMessage, LogMessageType } from "../../../../utils/logger";
 
 export class IoTDBHandler extends HandlerBase {
-  private session: Session;
   private subscriptionSimulator: SubscriptionSimulator;
   private dataPointsSchema: SupportedDataPoints = {};
+  private session: IoTDBSession;
 
-  constructor(sendMessage: (ws: WebSocketWithId, message: StatusMessage | DataContentMessage | ErrorMessage) => void) {
+  constructor(
+    sendMessage: (
+      ws: WebSocketWithId,
+      message: StatusMessage | DataContentMessage | ErrorMessage,
+    ) => void,
+  ) {
     super(sendMessage);
     if (!databaseConfig) {
       throw new Error("Invalid database configuration.");
     }
-    this.session = new Session();
+    this.session = new IoTDBSession();
     this.subscriptionSimulator = getSubscriptionSimulator(
+      this.session,
       this.sendMessageToClient.bind(this),
       this.createDataContentMessage,
       this.createStatusMessage,
       this.createErrorMessage,
-      this.sendAlreadySubscribedErrorMsg.bind(this));
+      this.sendAlreadySubscribedErrorMsg.bind(this),
+    );
   }
 
   async authenticateAndConnect(): Promise<void> {
-    await this.session.authenticateAndConnect();
+    await this.session.open();
     const supportedDataPoint: SupportedDataPoints =
       this.getSupportedDataPoints() as SupportedDataPoints;
     this.dataPointsSchema = createDataPointsSchema(supportedDataPoint);
-    await this.createDatabaseIfNeeded()
-   }
-  
-  async createDatabaseIfNeeded() {
-    const sql = `CREATE DATABASE ${databaseParams["VSS"].databaseName};`;
-    try {
-      await this.session.executeQueryStatement(sql);
-    } catch (e) {
-      logErrorStr(`Error creating database in IotDB: ${e}`);
-    }
+    await this.createDatabaseIfNeeded();
   }
 
-  protected subscribe(message: SubscribeMessageType, ws: WebSocketWithId): void {
-    const newDataPoints = this.getKnownDatapointsByPrefix(message.path);
-
-    if (newDataPoints.length === 0) {
-      this.sendRequestedDataPointsNotFoundErrorMsg(ws, message.path, message.requestId)
-      return;
-    }
-
-    void this.subscriptionSimulator.subscribe(message, ws, newDataPoints);
+  async createDatabaseIfNeeded(): Promise<void> {
+    await this.session.createDatabaseIfNeeded(
+      databaseParams["VSS"].databaseName,
+    );
   }
 
-  protected unsubscribe(message: UnsubscribeMessageType, ws: WebSocketWithId): void {
-    const dataPointsToUnsub = this.getKnownDatapointsByPrefix(message.path);
-    if (dataPointsToUnsub.length === 0) {
-      this.sendRequestedDataPointsNotFoundErrorMsg(ws, message.path, message.requestId)
-      return;
-    }
-
-    this.subscriptionSimulator.unsubscribe(message, ws, dataPointsToUnsub);
+  protected async get(
+    message: GetMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    return this.getData(message, ws);
   }
 
-  async unsubscribe_client(ws: WebSocketWithId): Promise<void> {
+  protected async set(
+    message: SetMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    return this.setData(message, ws);
+  }
+
+  protected async subscribe(
+    message: SubscribeMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    return this.subscribeData(message, ws);
+  }
+
+  protected async unsubscribe(
+    message: UnsubscribeMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    return this.unsubscribeData(message, ws);
+  }
+
+  async unsubscribeClient(ws: WebSocketWithId): Promise<void> {
     this.subscriptionSimulator.unsubscribeClient(ws);
-    await this.session.closeSession();
+    await this.session.close();
   }
 
-  protected async set(message: SetMessageType, ws: WebSocketWithId): Promise<void> {
+  public async getData(
+    message: GetMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    if (!this.session.isOpen()) {
+      try {
+        await this.session.open();
+      } catch (err) {
+        logMessage(
+          `IoTDBSession open failed, cannot serve client get: ${err}`,
+          LogMessageType.DEBUG,
+        );
+        this.sendGetResponseToClient(
+          { success: false, error: "Session unavailable" },
+          message.instance,
+          [],
+          ws,
+          message.requestId,
+          message.path,
+          message.root,
+          message.format,
+        );
+        return;
+      }
+    }
+
+    const requestedDataPoints = this.getKnownDatapointsByPrefix(message.path);
+
+    if (requestedDataPoints.length === 0) {
+      this.sendRequestedDataPointsNotFoundErrorMsg(
+        ws,
+        message.path,
+        message.requestId,
+      );
+      return;
+    }
+
+    const queryResult = await this.session.getDataPoints(
+      requestedDataPoints,
+      message.instance,
+    );
+
+    this.sendGetResponseToClient(
+      queryResult,
+      message.instance,
+      requestedDataPoints,
+      ws,
+      message.requestId,
+      message.path,
+      message.root,
+      message.format,
+    );
+  }
+
+  public async setData(
+    message: SetMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
     if (this.areNodesValid(message, ws)) {
       let statusMessage: StatusMessage | ErrorMessage;
       try {
         const data = {
           ...this.extractNodesFromMessageWithVinAsNode(message),
-          ...this.extractNodesFromMetadata(message)
-        }
-        let measurements: string[] = [];
-        let dataTypes: string[] = [];
-        let values: any[] = [];
+          ...this.extractNodesFromMetadata(message),
+        };
+        const measurements: string[] = [];
+        const dataTypes: string[] = [];
+        const values: unknown[] = [];
 
         for (const [key, value] of Object.entries(data)) {
           measurements.push(key);
@@ -106,57 +183,118 @@ export class IoTDBHandler extends HandlerBase {
         }
 
         const deviceId = databaseParams["VSS"].databaseName;
-        const status = await this.insertRecord(
+        const writeResult = await this.session.setDataPoints(
           deviceId,
           measurements,
           dataTypes,
-          values
+          values,
         );
 
-        logWithColor(`Record inserted to device ${deviceId}, 
-          status code: `.concat(JSON.stringify(status)),
-          COLORS.GREY
+        if (!writeResult.success) {
+          throw new Error(writeResult.error ?? "Unknown database error");
+        }
+
+        logWithColor(
+          `Record inserted to device ${deviceId},
+      status code: `.concat(
+            JSON.stringify(writeResult.status ?? { code: 200 }),
+          ),
+          COLORS.GREY,
         );
 
-        statusMessage = this.createStatusMessage(STATUS_SUCCESS.OK, "Successfully wrote data to database.", message.requestId);
+        statusMessage = this.createStatusMessage(
+          STATUS_SUCCESS.OK,
+          "Successfully wrote data to database.",
+          message.requestId,
+        );
       } catch (error: unknown) {
         const errMsg = error instanceof Error ? error.message : "Unknown error";
-        statusMessage = this.createErrorMessage(STATUS_ERRORS.SERVICE_UNAVAILABLE,
+        statusMessage = this.createErrorMessage(
+          STATUS_ERRORS.SERVICE_UNAVAILABLE,
           `Database service unavailable`,
           `Failed writing data. ${errMsg}`,
-          message.requestId);
+          message.requestId,
+        );
       }
       this.sendMessageToClient(ws, statusMessage);
     }
   }
 
-  private extractNodesFromMetadata(message: SetMessageType): Record<string, any> {
-    if (!message.metadata) return {}; // Return an empty object if metadata is missing
+  public async subscribeData(
+    message: SubscribeMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    const newDataPoints = this.getKnownDatapointsByPrefix(message.path);
 
-    return Object.fromEntries(
-      Object.entries(message.metadata).map(([key, value]) =>
-        [
-          message.path + this.formatKey(key) + METADATA_SUFFIX,
-          JSON.stringify(value)
-        ]
-      )
-    );
-  }
-  
-  private formatKey = (key: string) => key ? "_" + replaceDotsWithUnderscore(key) : "";
-
-  private getDataType(dataPointName: string) {
-    // return string type for metadata if correlating data point is known, throw error otherwise
-    if (dataPointName.endsWith(METADATA_SUFFIX)) {
-      let dataPoint = removeSuffixFromString(dataPointName, METADATA_SUFFIX);
-      if (this.dataPointsSchema.hasOwnProperty(dataPoint)) {
-        return SupportedMessageDataTypes.string
-      } else {
-        throw new Error(`Invalid metadata provided, datapoint ${replaceUnderscoresWithDots(dataPoint)} not defined.`);
-      }
+    if (newDataPoints.length === 0) {
+      this.sendRequestedDataPointsNotFoundErrorMsg(
+        ws,
+        message.path,
+        message.requestId,
+      );
+      return;
     }
 
-    // return defined datapoint type 
+    await this.session.subscribeDataPoints(
+      message,
+      ws,
+      newDataPoints,
+      this.subscriptionSimulator.subscribe.bind(this.subscriptionSimulator),
+    );
+  }
+
+  public async unsubscribeData(
+    message: UnsubscribeMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    const dataPointsToUnsub = this.getKnownDatapointsByPrefix(message.path);
+
+    if (dataPointsToUnsub.length === 0) {
+      this.sendRequestedDataPointsNotFoundErrorMsg(
+        ws,
+        message.path,
+        message.requestId,
+      );
+      return;
+    }
+
+    await this.session.unsubscribeDataPoints(
+      message,
+      ws,
+      dataPointsToUnsub,
+      this.subscriptionSimulator.unsubscribe.bind(this.subscriptionSimulator),
+    );
+  }
+
+  private extractNodesFromMetadata(
+    message: SetMessageType,
+  ): Record<string, unknown> {
+    if (!message.metadata) return {};
+
+    return Object.fromEntries(
+      Object.entries(message.metadata).map(([key, value]) => [
+        message.path + this.formatKey(key) + METADATA_SUFFIX,
+        JSON.stringify(value),
+      ]),
+    );
+  }
+
+  private formatKey = (key: string) =>
+    key ? "_" + replaceDotsWithUnderscore(key) : "";
+
+  private getDataType(dataPointName: string) {
+    if (dataPointName.endsWith(METADATA_SUFFIX)) {
+      const dataPoint = removeSuffixFromString(dataPointName, METADATA_SUFFIX);
+      if (
+        Object.prototype.hasOwnProperty.call(this.dataPointsSchema, dataPoint)
+      ) {
+        return SupportedMessageDataTypes.string;
+      } else {
+        throw new Error(
+          `Invalid metadata provided, datapoint ${replaceUnderscoresWithDots(dataPoint)} not defined.`,
+        );
+      }
+    }
     return this.dataPointsSchema[dataPointName];
   }
 
@@ -170,127 +308,41 @@ export class IoTDBHandler extends HandlerBase {
   private areNodesValid(message: NewMessage, ws: WebSocketWithId): boolean {
     const errorReason = this.validateNodesAgainstSchema(
       message,
-      this.dataPointsSchema
+      this.dataPointsSchema,
     );
 
     if (errorReason) {
-      logErrorStr(`Error validating message nodes against schema: ${errorReason}`);
-      const errorMessage = this.createErrorMessage(STATUS_ERRORS.NOT_FOUND,
-        'Nodes not found in schema',
+      logErrorStr(
+        `Error validating message nodes against schema: ${errorReason}`,
+      );
+      const errorMessage = this.createErrorMessage(
+        STATUS_ERRORS.NOT_FOUND,
+        "Nodes not found in schema",
         errorReason,
-        message.requestId);
+        message.requestId,
+      );
       this.sendMessageToClient(ws, errorMessage);
       return false;
     }
     return true;
   }
 
-  /**
-   * Inserts a record into the time series database.
-   * @param deviceId - The ID of the device.
-   * @param measurements - Array of measurement names.
-   * @param dataTypes - Array of data types for each value.
-   * @param values - Array of values to be inserted.
-   * @param isAligned - Flag indicating if the data is aligned.
-   * @returns - A promise that resolves with the result of the insertion.
-   * @throws - Throws an error if lengths of data types, values, and measurements do not match.
-   */
-  private async insertRecord(
-    deviceId: string,
-    measurements: string[],
-    dataTypes: string[],
-    values: any[],
-    isAligned = false
-  ): Promise<any> {
-    if (!this.session.getSessionId()) {
-      throw new Error("Session is not open. Please authenticate first.");
-    }
-    if (
-      values.length !== dataTypes.length ||
-      values.length !== measurements.length
-    ) {
-      throw "Length of data types does not equal to length of values!";
-    }
-
-    // Transform measurements (paths) from dots to underscores
-    const transformedMeasurements = measurements.map((measurement) =>
-      replaceDotsWithUnderscore(measurement)
-    );
-
-    // Validate the dataTypes before using them
-    const validatedDataTypes: (keyof typeof SupportedMessageDataTypes)[] = [];
-
-    dataTypes.forEach((dataType) => {
-      if (isSupportedDataPoint(dataType)) {
-        validatedDataTypes.push(dataType); // Add valid data types
-      } else {
-        throw new Error(`Unsupported data type: ${dataType}`);
-      }
-    });
-
-    const valuesInBytes = IoTDBDataInterpreter.serializeValues(
-      validatedDataTypes,
-      values
-    );
-
-    const request = new TSInsertRecordReq({
-      sessionId: this.session.getSessionId()!,
-      prefixPath: deviceId,
-      measurements: transformedMeasurements,
-      values: valuesInBytes,
-      timestamp: Date.now(),
-      isAligned: isAligned,
-    });
-
-    return await this.session.getClient().insertRecord(request);
-  }
-
   async getDataPointsFromDB(
     dataPoints: string[],
-    vin: string
+    vin: string,
   ): Promise<QueryResult> {
-
-    const metadataPoints = dataPoints.map((dataPoint) => dataPoint + METADATA_SUFFIX)
-    const {databaseName, dataPointId} = databaseParams["VSS"];
-    const latestDataPoints: Array<{ name: string; value: any }> = [];
-    const latestMetadata: Array<{ name: string; value: any }> = [];
-    try {
-      for (let i = 0; i < dataPoints.length; i++) {
-        const dataPoint = dataPoints[i];
-        const metadataPoint = metadataPoints[i];
-        const fieldSQL = `SELECT ${dataPoint + "," + metadataPoint}
-                          FROM ${databaseName}
-                          WHERE ${dataPointId} = '${vin}'
-                            AND ${dataPoint} IS NOT NULL
-                          ORDER BY time DESC
-                              LIMIT 1`;
-        const sessionDataSet = await this.session.executeQueryStatement(fieldSQL);
-        if (sessionDataSet instanceof SessionDataSet) {
-          const [data, meta] = transformSessionDataSet(sessionDataSet, databaseName);
-          data.forEach(({name, value}) => {
-            latestDataPoints.push({name, value});
-          });
-
-          meta.forEach(({name, value}) => {
-            latestMetadata.push({name, value});
-          });
-        }
-      }
-
-      return {success: true, dataPoints: latestDataPoints, metadata: latestMetadata};
-
-    } catch (error: unknown) {
-      const errMsg = error instanceof Error ? error.message : "Unknown database error";
-      return {success: false, error: errMsg};
-    }
+    return this.session.getDataPoints(dataPoints, vin);
   }
 
   getKnownDatapointsByPrefix(datapointPrefix: string) {
     const allKnownDataPoints: string[] = Object.keys(this.dataPointsSchema);
     return allKnownDataPoints
-      .filter(field => field !== databaseParams["VSS"].dataPointId) // remove VIN from the list, so only real data points are left
-      .filter(value => value === datapointPrefix
-        || (value.startsWith(datapointPrefix) && value[datapointPrefix.length] === "_")
+      .filter((field) => field !== databaseParams["VSS"].dataPointId) // remove VIN from the list, so only real data points are left
+      .filter(
+        (value) =>
+          value === datapointPrefix ||
+          (value.startsWith(datapointPrefix) &&
+            value[datapointPrefix.length] === "_"),
       );
   }
 }

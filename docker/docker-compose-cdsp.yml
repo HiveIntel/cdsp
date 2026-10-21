@@ -1,5 +1,14 @@
 name: cdsp
 
+x-knowledge-layer-common: &knowledge-layer-common
+  build:
+    context: ../cdsp/knowledge-layer
+    dockerfile: Dockerfile
+  container_name: knowledge-layer
+  entrypoint: ["/src/build/bin/reasoner_client"]
+  env_file:
+    - .env
+
 services:
 
 # Apache IoTDB acting as VSS Data Store
@@ -9,7 +18,7 @@ services:
     build:
       context: iotdb  # CDSP IoTDB image
       args:
-        IOTDB_VERSION: 2.0.6
+        IOTDB_VERSION: 2.0.8
         SERVICE_HOSTNAME: iotdb-service
     restart: on-failure:3
     ports:
@@ -56,6 +65,7 @@ services:
     image: oxfordsemantic/rdfox-init:latest
     container_name: rdfox-init
     platform: linux/amd64
+    profiles: ["rdfox"]
     volumes:
       - ${RDFOX_LIC_PATH}:/opt/RDFox/RDFox.lic  # License file on host
       - rdfox-server-directory:/home/rdfox/.RDFox
@@ -71,6 +81,7 @@ services:
     image: oxfordsemantic/rdfox:latest
     container_name: rdfox-service
     platform: linux/amd64
+    profiles: ["rdfox"]
     depends_on:
       rdfox-init:
         condition: service_completed_successfully
@@ -89,6 +100,22 @@ services:
           memory: 8g
           cpus: "2.0"
     restart: "always"
+
+  # RDF4J Stream Reasoner (open-source, no license required)
+  rdf4j-stream-reasoner-service:
+    profiles: ["rdf4j"]
+    build:
+      context: rdf4j
+    image: rdf4j-stream-reasoner:latest
+    container_name: rdf4j-stream-reasoner-service
+    ports:
+      - "12110:12110"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:12110/datastores"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
 
  # VISSR acting as VISS Data Server
 
@@ -134,6 +161,30 @@ services:
       - ./vissr-logs:/app/logs
     volumes_from:
       - tmp
+
+# Knowledge Layer Server using RDFox
+  knowledge-layer-rdfox:
+    <<: *knowledge-layer-common
+    profiles: ["rdfox"]
+    depends_on:
+      rdfox-service:
+        condition: service_started
+      information-layer:
+        condition: service_started
+    environment:
+      - HOST_REASONER_SERVER=rdfox-service
+
+  # Knowledge Layer Server using RDF4J
+  knowledge-layer-rdf4j:
+    <<: *knowledge-layer-common
+    profiles: ["rdf4j"]
+    depends_on:
+      rdf4j-stream-reasoner-service:
+        condition: service_healthy
+      information-layer:
+        condition: service_started
+    environment:
+      - HOST_REASONER_SERVER=rdf4j-stream-reasoner-service
 
 volumes:
   rdfox-server-directory:

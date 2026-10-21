@@ -1,198 +1,224 @@
 # VSS Vehicle.Speed down-sample example
+
 This is an example of using the Central Data Service Playground (CDSP) to transform timeseries data using the Apache IoTDB data store. It accurately down-samples a timeseries of pre-recorded high frequency VSS `Vehicle.Speed` data.
 
 ## Logical Concept
+
 In a data centric architecture the data/information layers can efficiently support ETL/ELT (Extract, Transform, Load) style operations. Timeseries data can be efficiently stored and retrieved by a timeseries database for example. Some databases will also provide the transform operation. This frees developers to concentrate on data architecture, algorithm selection and business logic.
 
 ### Example scenario: journey analysis
+
 Processing could follow the following steps:
 
-1) A vehicle could generate a day's worth of high frequency GPS location data which is stored in a database as the timeseries `day-journey`.
+1. A vehicle could generate a day's worth of high frequency GPS location data which is stored in a database as the timeseries `day-journey`.
 
-2) At the end of each day the `day-journey` timeseries could be down-sampled and stored in a new timeseries `day-journey-upload`. The down-sampling performed by an intelligent algorithm that retains important information whilst greatly reducing the number of data points.
+2. At the end of each day the `day-journey` timeseries could be down-sampled and stored in a new timeseries `day-journey-upload`. The down-sampling performed by an intelligent algorithm that retains important information whilst greatly reducing the number of data points.
 
-3) The `day-journey-upload` timeseries can then be used as input to the vehicle's car2cloud subsystem to upload to the cloud for further ETL/ELT processing, e.g. identification of regular routes for use in an assistant.
+3. The `day-journey-upload` timeseries can then be used as input to the vehicle's car2cloud subsystem to upload to the cloud for further ETL/ELT processing, e.g. identification of regular routes for use in an assistant.
 
 In-vehicle processing like this can save in-vehicle network bandwidth, whilst also significantly reducing data transmission costs in the upload.
 
 Additionally, with the focus on a data centric architecture the same data models and processes can be used both in-vehicle and the cloud.
 
 ### Other scenarios
+
 The same pattern can be applied to other scenarios such as diagnostics for component health, or driver monitoring.
 
 Hybrids of in-vehicle and off-board analysis allow flexible reduction of transmission, storage and processing costs and network load.
 
 ## Implementation
+
 In this section we will summarise how we implemented the extraction of the real drive data into VSS, loaded it into the database and transformed it.
 
 ### Dataset (extract)
+
 The supporting file `vehicle_speed_rl_dataset.csv` contains a dataset of `Vehicle.Speed` data in the VSS data model for you to experiment with and which we will use throughout the following examples. The file format is Comma-separated values (CSV) for wide compatibility.
 
-The pre-recorded data comes from a real car journey *Night drive to Luftkastellet* captured by [RemotiveLabs](https://remotivelabs.com/) as an example for their cloud platform. RemotiveLabs kindly gave permission for the speed data to be used for this Playground example.
+The pre-recorded data comes from a real car journey _Night drive to Luftkastellet_ captured by [RemotiveLabs](https://remotivelabs.com/) as an example for their cloud platform. RemotiveLabs kindly gave permission for the speed data to be used for this Playground example.
 
 The dataset contains just over 13500 values recorded over approximately 5 minutes at 20ms intervals.
 
 ### Load
+
 In the example we will import the dataset into a VSS `Vehicle.Speed` timeseries within IoTDB.
 
 IoTDB provides import/export tools for its native TsFile file format, SQL and CSV and which are included in the runtime image. We will use the [`import-data.sh`](https://iotdb.apache.org/UserGuide/latest/Tools-System/Data-Import-Tool_apache.html) tool to perform the import.
+IoTDB provides import/export tools for its native TsFile file format, SQL and CSV and which are included in the runtime image. We will use the [`import-data.sh`](https://iotdb.apache.org/UserGuide/latest/Tools-System/Data-Import-Tool_apache.html) tool to perform the import.
 
 ### Transform
-IoTDB has a library of Data Quality functions which includes the function [`Sample`](https://iotdb.apache.org/UserGuide/latest/SQL-Manual/UDF-Libraries_apache.html#sample) for sampling. Sample has three sampling methods: `Reservoir`, `Isometric` and `Triangle`. 
+
+IoTDB has a library of Data Quality functions which includes the function [`Sample`](https://iotdb.apache.org/UserGuide/latest/SQL-Manual/UDF-Libraries_apache.html#_3-16-sample) for sampling. Sample has three sampling methods: `Reservoir`, `Isometric` and `Triangle`.
 
 Sample function:
 
-+ *Input*: A single timeseries of arbitrary data type is taken as the input.
+- _Input_: A single timeseries of arbitrary data type is taken as the input.
 
-+ *Output*: The output is also a single timeseries, of the same type.
+- _Output_: The output is also a single timeseries, of the same type.
 
-+ *Parameters*: 
+- _Parameters_:
 
-    `method` specifies the method to use for the sampling.
+  `method` specifies the method to use for the sampling.
 
-    `k` specifies the number of samples to be output and must be a positive integer. By default, it's 1. If k is greater than the length of the input series, all data points in the input series will be output.
+  `k` specifies the number of samples to be output and must be a positive integer. By default, it's 1. If k is greater than the length of the input series, all data points in the input series will be output.
 
 As the most intelligent algorithm of the three methods, that balances accurately representing the data, whilst supporting significant data reduction, our example uses the `Triangle` method to down-sample the 13500 input samples to 100.
 
 To perform the down-sample the `Sample` function is executed as part of an SQL query that takes the input timeseries and returns the down-sampled data:
-~~~sql
+
+```sql
 select sample(`Vehicle.Speed`,'method'='triangle','k'='100') from root.test2.vin123test
-~~~
+```
 
 The following screenshot shows the results graphed in Grafana. The green graph is the input data, the yellow graph the down-sampled data. We can see that the result accurately traces the input data.
 ![Screenshot of a diagram showing two overlapping graphs of the input and output datasets](images/vss-down-sample-graph.png)
-*Figure 1: Grafana visualisation of the results. Key: Green=input data, yellow=down-sampled result*
+_Figure 1: Grafana visualisation of the results. Key: Green=input data, yellow=down-sampled result_
 
 Tips:
-+ Documentation for each Sample method and the other functions can be found in the [IoTDB library documentation](https://iotdb.apache.org/UserGuide/latest/SQL-Manual/UDF-Libraries_apache.html).
 
-+ Triangle uses a *Largest-Triangle-Three-Buckets (LTTB)* algorithm to calculate the output timeseries. Details of which can be found in the originating academic research: [Downsampling Time Series for Visual Representation, Sveinn Steinarsson, 2013](https://skemman.is/bitstream/1946/15343/3/SS_MSthesis.pdf)
+- Documentation for each Sample method and the other functions can be found in the [IoTDB library documentation](https://iotdb.apache.org/UserGuide/latest/SQL-Manual/UDF-Libraries_apache.html).
+
+- Triangle uses a _Largest-Triangle-Three-Buckets (LTTB)_ algorithm to calculate the output timeseries. Details of which can be found in the originating academic research: [Downsampling Time Series for Visual Representation, Sveinn Steinarsson, 2013](https://skemman.is/bitstream/1946/15343/3/SS_MSthesis.pdf)
 
 ### Notes on other methods
-*Live data*: In this example we have used a fixed dataset as input as it helps understand the results, especially when graphed.
+
+_Live data_: In this example we have used a fixed dataset as input as it helps understand the results, especially when graphed.
 
 To use live data instead you simply need to write it to the database. The Playground provides the [RemotiveLabs feeder](https://github.com/COVESA/cdsp/tree/main/examples/remotivelabs-feeder) which can be used as a bridge to stream live data from the RemotiveLabs cloud platform. Alternatively, you could write some glue code between your source and the database.
 
-*Algorithms*: The example uses the intelligent sampling algorithm LTTB. IoTDB has other methods built-in and within the Data Quality library for you to try if you wish. Simply change the SQL query.
+_Algorithms_: The example uses the intelligent sampling algorithm LTTB. IoTDB has other methods built-in and within the Data Quality library for you to try if you wish. Simply change the SQL query.
 
 If you wish to try algorithms not implemented in IoTDB one starting point would be to use its efficient storage and retrieval of timeseries data to store and retrieve the data and do the sampling in your own code. As a second step, IoTDB allows you write User Defined Functions (UDF) and this could be used to integrate the new algorithm and call it like any other function. This could be used to integrate the CurveLogic algorithm for example.
 
-*Programmed*: Whilst the example uses interactive methods, the same can easily be codified.
+_Programmed_: Whilst the example uses interactive methods, the same can easily be codified.
 
 ## How-To Tutorial
+
 Having explained the implementation in the previous section, in this section we will provide a How-To to illustrate the steps.
 
 We will use the IoTDB CLI client to send SQL commands on its command line to the database.
+
 ### Preparation
+
 1. Open a terminal. We will use this to run docker commands.
 2. Open another terminal. We will use this to run the IoTDB CLI client.
 3. Start the Playground if it is not already running.
-    ~~~
-    $ docker compose -f docker-compose-cdsp.yml up -d
-    ~~~
+   ```
+   $ docker compose -f docker-compose-cdsp.yml up -d
+   ```
 4. Start the IoTDB CLI client
-    ~~~
-    $ docker exec -ti iotdb-service /iotdb/sbin/start-cli.sh -h iotdb-service
-    ~~~
+   ```
+   $ docker exec -ti iotdb-service /iotdb/sbin/start-cli.sh -h iotdb-service
+   ```
 
 #### Data Quality Library setup
+
 The IoTDB Data Library is an optional install. To call the functions they must first be registered in the running IoTDB instance, which you only need to do once. The script /iotdb/sbin/register-UDF.sh is included in the IoTDB image to do this for you.
 
 Execute the script using the Docker `exec` command:
 
-~~~
+```
 $ sudo docker exec -ti iotdb-service /iotdb/sbin/register-UDF.sh
-~~~
+```
 
 Info: See the online documentation site for [details](https://covesa.github.io/cdsp/manuals/apache-iotdb/#setup)
 
-Tip: If for some reason you are failing to register the Data Quality Library, substitute one of the [built-in sample functions](https://iotdb.apache.org/UserGuide/latest/SQL-Manual/Operator-and-Expression.html#sample-functions) rather than `Sample()` in the SQL below.
+Tip: If for some reason you are failing to register the Data Quality Library, substitute one of the [built-in sample functions](https://iotdb.apache.org/UserGuide/latest/SQL-Manual/Function-and-Expression.html#_11-sample-functions) rather than `Sample()` in the SQL below.
 
 ### Import the dataset
 
 1. Create the database in IoTDB into which we will import
 
-    Using the IoTDB CLI client:
-    ~~~sql
-    IoTDB> create database root.test2
-    ~~~
-    Info: The `root.test2` database is commonly used in Playground documentation and therefore may already exist in your instance. The command will simply report that fact if it does.
+   Using the IoTDB CLI client:
+
+   ```sql
+   IoTDB> create database root.test2
+   ```
+
+   Info: The `root.test2` database is commonly used in Playground documentation and therefore may already exist in your instance. The command will simply report that fact if it does.
 
 2. Import the dataset into IoTDB
 
-    2.1. Copy the dataset file to a volume visible within the IoTDB image:
-    ~~~
-    $ sudo cp vehicle_speed_rl_dataset.csv ../../docker/iotdb-data
-    ~~~
+   2.1. Copy the dataset file to a volume visible within the IoTDB image:
 
-    2.2. Import the dataset
+   ```
+   $ sudo cp vehicle_speed_rl_dataset.csv ../../docker/iotdb-data
+   ```
 
-    To import the dataset into IoTDB we need to execute the `import-data.sh` tool in the IoTDB image. That can be done from the host terminal using the docker `exec` command.
-    ~~~
-    $ sudo docker exec -ti iotdb-service /iotdb/tools/import-data.sh -h iotdb-service -p 6667 -u root -pw root -s /iotdb/data/vehicle_speed_rl_dataset.csv
-    ~~~
+   2.2. Import the dataset
 
-    Example successful execution:
-    ~~~
-    $ sudo docker exec -ti iotdb-service /iotdb/tools/import-data.sh -h iotdb-service -p 6667 -u root -pw root -s /iotdb/data/vehicle_speed_rl_dataset.csv
-    ------------------------------------------
-    Starting IoTDB Client Import Script
-    ------------------------------------------
-    Import completely!
-    ~~~
+   To import the dataset into IoTDB we need to execute the `import-data.sh` tool in the IoTDB image. That can be done from the host terminal using the docker `exec` command.
+
+   ```
+   $ sudo docker exec -ti iotdb-service /iotdb/tools/import-data.sh -h iotdb-service -p 6667 -u root -pw root -s /iotdb/data/vehicle_speed_rl_dataset.csv
+   ```
+
+   Example successful execution:
+
+   ```
+   $ sudo docker exec -ti iotdb-service /iotdb/tools/import-data.sh -h iotdb-service -p 6667 -u root -pw root -s /iotdb/data/vehicle_speed_rl_dataset.csv
+   ------------------------------------------
+   Starting IoTDB Client Import Script
+   ------------------------------------------
+   Import completely!
+   ```
 
 3. Optional: You can check your import by querying the timeseries using the IoTDB CLI client:
 
-    Example 1: Query how many values are in the timeseries:
-    ~~~sql
-    IoTDB> select count(`Vehicle.Speed`) from root.test2.vin123test
-    +--------------------------------------------+
-    |count(root.test2.vin123test.`Vehicle.Speed`)|
-    +--------------------------------------------+
-    |                                       13520|
-    +--------------------------------------------+
-    Total line number = 1
-    It costs 0.006s
-    ~~~
+   Example 1: Query how many values are in the timeseries:
 
-    Example 2: Query the data values in the timeseries:
-    ~~~sql
-    IoTDB> select `Vehicle.Speed` from root.test2.vin123test limit 7
-    +------------------------+-------------------------------------+
-    |                    Time|root.test2.vin123test.`Vehicle.Speed`|
-    +------------------------+-------------------------------------+
-    |2023-11-08T19:34:39.651Z|                                  0.0|
-    |2023-11-08T19:34:39.663Z|                                  0.0|
-    |2023-11-08T19:34:39.679Z|                                  0.0|
-    |2023-11-08T19:34:39.699Z|                                  0.0|
-    |2023-11-08T19:34:39.718Z|                                  0.0|
-    |2023-11-08T19:34:39.740Z|                                  0.0|
-    |2023-11-08T19:34:39.759Z|                                  0.0|
-    +------------------------+-------------------------------------+
-    Total line number = 7
-    It costs 0.021s
-    ~~~
+   ```sql
+   IoTDB> select count(`Vehicle.Speed`) from root.test2.vin123test
+   +--------------------------------------------+
+   |count(root.test2.vin123test.`Vehicle.Speed`)|
+   +--------------------------------------------+
+   |                                       13520|
+   +--------------------------------------------+
+   Total line number = 1
+   It costs 0.006s
+   ```
+
+   Example 2: Query the data values in the timeseries:
+
+   ```sql
+   IoTDB> select `Vehicle.Speed` from root.test2.vin123test limit 7
+   +------------------------+-------------------------------------+
+   |                    Time|root.test2.vin123test.`Vehicle.Speed`|
+   +------------------------+-------------------------------------+
+   |2023-11-08T19:34:39.651Z|                                  0.0|
+   |2023-11-08T19:34:39.663Z|                                  0.0|
+   |2023-11-08T19:34:39.679Z|                                  0.0|
+   |2023-11-08T19:34:39.699Z|                                  0.0|
+   |2023-11-08T19:34:39.718Z|                                  0.0|
+   |2023-11-08T19:34:39.740Z|                                  0.0|
+   |2023-11-08T19:34:39.759Z|                                  0.0|
+   +------------------------+-------------------------------------+
+   Total line number = 7
+   It costs 0.021s
+   ```
 
 ### Down-sample the data
+
 In the previous steps we imported the dataset `vehicle_speed_rl_dataset.csv` into the timeseries `` root.test2.vin123test.`Vehicle.Speed` `` in IoTDB. Now we will down-sample the timeseries using an SQL query that uses the `Sample` function. The queries will be executed in the IoTDB CLI client.
 
 SQL queries can contain a wide range of optional clauses to determine the data that is processed. For example, you can limit the query to a specific time range to isolate a specific journey for the [example scenario](#example-scenario-journey-analysis) at the start of this document.
 
 For this How-To we will concentrate on using two simple query statements:
+
 1. `SELECT SAMPLE() FROM <ts1>` which down-samples timeseries ts1 and returns the result
-2. `SELECT SAMPLE() INTO <ts2> FROM <ts1>` which down-samples timeseries ts1 and places the result *INTO* timeseries ts2.
+2. `SELECT SAMPLE() INTO <ts2> FROM <ts1>` which down-samples timeseries ts1 and places the result _INTO_ timeseries ts2.
 
 #### Example query 1: Down-sample to 100 samples and return the result
+
 SQL query to down-sample timeseries `` root.test2.vin123test.`Vehicle.Speed` `` to 100 samples and return the result:
 
-~~~sql
+```sql
 select sample(`Vehicle.Speed`,'method'='triangle','k'='100') from root.test2.vin123test
-~~~
+```
 
 <details>
 <summary>Example IoTDB CLI client query result..</summary>
 
-~~~sql
+```sql
 IoTDB> select sample(`Vehicle.Speed`,'method'='triangle','k'='100') from root.test2.vin123test
 +------------------------+-----------------------------------------------------------------------------+
 |                    Time|sample(root.test2.vin123test.`Vehicle.Speed`, "method"="triangle", "k"="100")|
@@ -301,20 +327,23 @@ IoTDB> select sample(`Vehicle.Speed`,'method'='triangle','k'='100') from root.te
 Total line number = 100
 It costs 0.117s
 IoTDB>
-~~~
+```
 
 </details>
 
 #### Example query 2: Down-sample and store result in new timeseries
+
 The IoTDB SQL syntax provides the `INTO` clause which stores the result in a new timeseries. This is especially useful for internal ETL/ELT (Extract, Transform, Load) style operations. For example this could be used to prepare the end of day upload of data described in the [example scenario](#example-scenario-journey-analysis) at the start of this document.
 
 Extend the example 1 SQL query statement to place the result in a new timeseries `root.test2.vin123test.speed_upload`:
-~~~sql
+
+```sql
 select sample(`Vehicle.Speed`,'method'='triangle','k'='100') into root.test2.vin123test(speed_upload) from root.test2.vin123test
-~~~
+```
 
 Example IoTDB CLI client query result:
-~~~sql
+
+```sql
 IoTDB> select sample(`Vehicle.Speed`,'method'='triangle','k'='100') into root.test2.vin123test(speed_upload) from root.test2.vin123test
 +-----------------------------------------------------------------------------+----------------------------------+-------+
 |                                                                 SourceColumn|                  TargetTimeseries|Written|
@@ -323,35 +352,40 @@ IoTDB> select sample(`Vehicle.Speed`,'method'='triangle','k'='100') into root.te
 +-----------------------------------------------------------------------------+----------------------------------+-------+
 Total line number = 1
 It costs 0.028s
-~~~
+```
 
 ### Suggested next steps
-+ Repeat the query with the same input data, but with different `k` parameter values to see what affects the number of samples has on the accuracy of the trace compared to the input data.
-+ Amend the query with other [SQL clauses](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Query-Data_apache.html) to shape what you are interested in, e.g. use `WHERE` to define a time filter.
-+ A great way to explore these sampling queries is by using Grafana as discussed below.
-+ Try the other [IoTDB data processing functions](https://covesa.github.io/cdsp/manuals/apache-iotdb/#data-processing-functions)
+
+- Repeat the query with the same input data, but with different `k` parameter values to see what affects the number of samples has on the accuracy of the trace compared to the input data.
+- Amend the query with other [SQL clauses](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Query-Data_apache.html) to shape what you are interested in, e.g. use `WHERE` to define a time filter.
+- A great way to explore these sampling queries is by using Grafana as discussed below.
+- Try the other [IoTDB data processing functions](https://covesa.github.io/cdsp/manuals/apache-iotdb/#data-processing-functions)
 
 ## Using Grafana to visualise the result
+
 Using Grafana we can send the same SQL queries to IoTDB and have Grafana visualize the results interactively.
 
 For example, we can ask Grafana to plot both the input data set and the down-sampled data on the same graph as shown below.
 
 ![Screenshot of a diagram showing two overlapping graphs of the input and output datasets](images/vss-down-sample-graph.png)
-*Figure 1: Grafana visualisation of the results. Key: Green=input data, yellow=down-sampled result*
+_Figure 1: Grafana visualisation of the results. Key: Green=input data, yellow=down-sampled result_
 
 If we edit the query for the down-sample to change the `k` parameter to 10 or 1000 and re-run the query we can see the effect of how well it follows the original input data in real time.
 
-This ability to use the same SQL query in the IoTDB CLI Client, any code and Grafana is in-line with our desire to use consistent data models and processes in a data centric architecture. 
+This ability to use the same SQL query in the IoTDB CLI Client, any code and Grafana is in-line with our desire to use consistent data models and processes in a data centric architecture.
 
 ### Setup
+
 #### Grafana connection setup
+
 The IoTDB project maintains the IoTDB Grafana Plugin to allow Grafana to interact with IoTDB data sources using the IoTDB REST API. This Plugin has been upstreamed into the Grafana project and can be installed from Grafana. Installation and usage instructions can be found in the IoTDB [online documentation](https://iotdb.apache.org/UserGuide/latest/Ecosystem-Integration/Grafana-Plugin.html).
 
 Note: The Plugin install instructions describe enabling the IoTDB REST API, which is disabled by default in IoTDB. This has already been done for you in the Playground IoTDB Docker image.
 
 #### Grafana panel setup
+
 As stated at the start of this Grafana section we can simply use the same queries we used earlier in the How-To in Grafana.
 
 The screenshot below from Grafana v10.4 shows the Panel setup used to generate the graphs shown in Figure 1. Two queries are added to the Panel, one to return the input timeseries, the other to return the down-sampled data.
 ![Screenshot of a diagram showing two overlapping graphs of the input and output datasets](images/grafana-vss-down-sample-query.png)
-*Figure 2: Grafana Panel setup to produce Figure 1.*
+_Figure 2: Grafana Panel setup to produce Figure 1._

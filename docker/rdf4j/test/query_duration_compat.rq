@@ -1,0 +1,24 @@
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+# Compatibility check: xsd:dateTime arithmetic and xsd:duration comparison.
+#
+# xsd:dateTime - xsd:dateTime and xsd:duration comparisons are XPath 2.0 operations.
+# They are undefined in SPARQL 1.1 (see w3c/sparql-dev#32) and unavailable in RDF4J's
+# default evaluation mode (strict). In strict mode, the BIND expression produces an
+# error and the row is silently dropped — no exception is raised.
+#
+# RDFox implements XPath 2.0 datetime arithmetic as a non-standard extension, so the
+# same expression works there.
+#
+# Reference: https://rdf4j.org/documentation/programming/repository/#tweaking-the-query-evaluation-mode
+#
+# Expected in RDF4J (strict mode, default) : 0 rows
+# Expected in RDFox                        : 1 row  (diff=PT2S, ok=true)
+
+SELECT ?start ?end ?diff ?ok WHERE {
+  VALUES (?start ?end) {
+    ("2026-06-30T09:00:00"^^xsd:dateTime "2026-06-30T09:00:02"^^xsd:dateTime)
+  }
+  BIND(?end - ?start AS ?diff)
+  BIND(?diff < "PT4S"^^xsd:duration AS ?ok)
+}

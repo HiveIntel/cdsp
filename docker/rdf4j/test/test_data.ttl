@@ -1,0 +1,72 @@
+@prefix car:  <http://example.ontology.com/car#> .
+@prefix sosa: <http://www.w3.org/ns/sosa/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# ── Vehicle structure ────────────────────────────────────────────────────────
+
+car:VehicleVINABCD1234567890
+    a car:Vehicle ;
+    car:hasPart  car:ChassisVINABCD1234567890 ;
+    car:hasPart  car:PowertrainVINABCD1234567890 ;
+    car:hasSignal car:CurrentLocationVINABCD1234567890 .
+
+car:ChassisVINABCD1234567890
+    a car:Chassis ;
+    car:hasPart car:SteeringWheelVINABCD1234567890 .
+
+car:SteeringWheelVINABCD1234567890
+    a car:SteeringWheel .
+
+car:PowertrainVINABCD1234567890
+    a car:Powertrain .
+
+car:CurrentLocationVINABCD1234567890
+    a car:CurrentLocation .
+
+# ── Speed observations (speed > 10 triggers HighSpeedObservation) ─────────────
+
+car:ob_speed_t1
+    a sosa:Observation ;
+    sosa:hasFeatureOfInterest car:PowertrainVINABCD1234567890 ;
+    sosa:observedProperty     car:speed ;
+    sosa:hasSimpleResult      "45"^^xsd:float ;
+    sosa:phenomenonTime       "2026-06-30T09:00:00.000000000Z"^^xsd:dateTime .
+
+car:ob_speed_t2
+    a sosa:Observation ;
+    sosa:hasFeatureOfInterest car:PowertrainVINABCD1234567890 ;
+    sosa:observedProperty     car:speed ;
+    sosa:hasSimpleResult      "62"^^xsd:float ;
+    sosa:phenomenonTime       "2026-06-30T09:00:01.000000000Z"^^xsd:dateTime .
+
+# ── Steering angle observations ───────────────────────────────────────────────
+
+car:ob_angle_t1
+    a sosa:Observation ;
+    sosa:hasFeatureOfInterest car:SteeringWheelVINABCD1234567890 ;
+    sosa:observedProperty     car:angle ;
+    sosa:hasSimpleResult      "10"^^xsd:int ;
+    sosa:phenomenonTime       "2026-06-30T09:00:00.000000000Z"^^xsd:dateTime .
+
+car:ob_angle_t2
+    a sosa:Observation ;
+    sosa:hasFeatureOfInterest car:SteeringWheelVINABCD1234567890 ;
+    sosa:observedProperty     car:angle ;
+    sosa:hasSimpleResult      "200"^^xsd:int ;
+    sosa:phenomenonTime       "2026-06-30T09:00:01.000000000Z"^^xsd:dateTime .
+
+# ── Location observations (matching timestamps) ───────────────────────────────
+
+car:ob_latitude_t1
+    a sosa:Observation ;
+    sosa:hasFeatureOfInterest car:CurrentLocationVINABCD1234567890 ;
+    sosa:observedProperty     car:latitude ;
+    sosa:hasSimpleResult      "48.137154"^^xsd:double ;
+    sosa:phenomenonTime       "2026-06-30T09:00:00.000000000Z"^^xsd:dateTime .
+
+car:ob_longitude_t1
+    a sosa:Observation ;
+    sosa:hasFeatureOfInterest car:CurrentLocationVINABCD1234567890 ;
+    sosa:observedProperty     car:longitude ;
+    sosa:hasSimpleResult      "11.576124"^^xsd:double ;
+    sosa:phenomenonTime       "2026-06-30T09:00:00.000000000Z"^^xsd:dateTime .

@@ -1,0 +1,15 @@
+PREFIX car:  <http://example.ontology.com/car#>
+PREFIX xsd:  <http://www.w3.org/2001/XMLSchema#>
+
+# Returns all inferred HighSpeedObservation instances with their speed and timestamp.
+# Expected: one result for car:ob_speed_t2 (speed=62, the CurrentObservation after Rule 1).
+# Inferences are written to the named graph <http://example.org/inferred> by executeRules().
+
+SELECT ?HighSpeedObservation ?speed ?datetime
+FROM <http://example.org/inferred>
+WHERE {
+    ?HighSpeedObservation a car:HighSpeedObservation ;
+        car:hasSpeed              ?speed ;
+        car:hasObservationDatetime ?datetime .
+}
+ORDER BY DESC(?speed)

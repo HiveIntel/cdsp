@@ -16,8 +16,29 @@ class TestHandler extends HandlerBase {
     super(sendMessageFn);
   }
 
+  callSendGetResponse(
+    queryResult: QueryResult,
+    vin: string,
+    requestedDataPoints: string[],
+    ws: WebSocketWithId,
+    requestId: string,
+    path: string,
+    root: "absolute" | "relative",
+    format: "nested" | "flat",
+  ): void {
+    this.sendGetResponseToClient(
+      queryResult,
+      vin,
+      requestedDataPoints,
+      ws,
+      requestId,
+      path,
+      root,
+      format,
+    );
+  }
+
   getKnownDatapointsByPrefix(prefix: string): string[] {
-    // Mock implementation - return expected datapoints based on prefix
     if (prefix.includes("CurrentLocation")) {
       return [
         "Vehicle_CurrentLocation_Latitude",
@@ -37,9 +58,8 @@ class TestHandler extends HandlerBase {
 
   async getDataPointsFromDB(
     dataPoints: string[],
-    vin: string,
+    _vin: string,
   ): Promise<QueryResult> {
-    // Mock DB response with test data
     const dataPointsArray = dataPoints.map((dp) => {
       if (dp === "Vehicle_CurrentLocation_Latitude") {
         return { name: "Vehicle.CurrentLocation.Latitude", value: 60 };
@@ -98,13 +118,34 @@ describe("HandlerBase - Format and Root Options", () => {
 
   beforeEach(() => {
     capturedMessage = null;
-    handler = new TestHandler((ws: WebSocketWithId, message: any) => {
+    handler = new TestHandler((_ws: WebSocketWithId, message: any) => {
       if (message.type === "data") {
         capturedMessage = message as DataContentMessage;
       }
     });
     mockWebSocket = { id: "test-ws" } as WebSocketWithId;
   });
+
+  const runGetFlow = async (message: GetMessageType) => {
+    const requestedDataPoints = handler.getKnownDatapointsByPrefix(
+      message.path,
+    );
+    const queryResult = await handler.getDataPointsFromDB(
+      requestedDataPoints,
+      message.instance,
+    );
+
+    handler.callSendGetResponse(
+      queryResult,
+      message.instance,
+      requestedDataPoints,
+      mockWebSocket,
+      message.requestId,
+      message.path,
+      message.root,
+      message.format,
+    );
+  };
 
   describe("path contains only root Vehicle", () => {
     it("should format flat + relative", async () => {
@@ -117,7 +158,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -154,7 +195,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -174,7 +215,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -196,7 +237,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -209,7 +250,7 @@ describe("HandlerBase - Format and Root Options", () => {
     });
   });
 
-  describe("Path contains  Vehicle_CurrentLocation", () => {
+  describe("Path contains Vehicle_CurrentLocation", () => {
     it("should format flat + relative - removes CurrentLocation from keys", async () => {
       const message: GetMessageType = {
         type: NewMessageType.Get,
@@ -220,7 +261,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -251,7 +292,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -282,7 +323,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -301,7 +342,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -315,7 +356,6 @@ describe("HandlerBase - Format and Root Options", () => {
 
   describe("Path contains CurrentLocation.Latitude (leaf node)", () => {
     beforeEach(() => {
-      // Override mock for single datapoint
       handler.getKnownDatapointsByPrefix = jest
         .fn()
         .mockReturnValue(["Vehicle_CurrentLocation_Latitude"]);
@@ -331,7 +371,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -356,7 +396,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -381,10 +421,9 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
-      // Special case: nested + relative for exact match returns value directly
       expect(capturedMessage?.data).toBe(60);
       expect(capturedMessage?.metadata).toEqual({
         "": {
@@ -405,7 +444,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await runGetFlow(message);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
